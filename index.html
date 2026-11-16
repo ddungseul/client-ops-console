@@ -45,6 +45,7 @@
   .nav-item:hover { background: #222631; color: #fff; }
   .nav-item.active { background: #2a2f3b; color: #fff; font-weight: 600; }
   .nav-item .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .5; }
+  .sidebar-note { font-size: 11px; line-height: 1.5; color: #6c7380; padding: 24px 10px 0; }
 
   .main { min-width: 0; }
   .topbar { display: flex; align-items: center; gap: 12px; padding: 14px 28px; background: var(--surface); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; }
@@ -178,7 +179,7 @@
   @media (max-width: 760px) {
     .app { grid-template-columns: 1fr; }
     .sidebar { position: static; height: auto; display: flex; flex-wrap: wrap; gap: 4px; }
-    .brand-sub, .nav-group { display: none; }
+    .brand-sub, .nav-group, .sidebar-note { display: none; }
     .nav-item { width: auto; }
     .topbar { flex-wrap: wrap; }
     .client-picker input { width: 100%; }
@@ -205,6 +206,7 @@
     <button class="nav-item" data-view="schedules"><span class="dot"></span>자동 발송</button>
     <button class="nav-item" data-view="logs"><span class="dot"></span>발송 기록</button>
     <button class="nav-item" data-view="clients"><span class="dot"></span>화주사 · 담당자</button>
+    <div class="sidebar-note">화주사·담당자·고객 정보는 모두 가상 데이터이며 실존 브랜드·인물과 관계없습니다.</div>
   </aside>
 
   <div class="main">
