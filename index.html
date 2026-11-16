@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>3PL CX 콘솔</title>
+<title>고객사 운영 콘솔</title>
 <style>
   :root {
     --bg: #f4f5f7;
@@ -74,11 +74,16 @@
   .kpi .value { font-size: 26px; font-weight: 700; margin-top: 6px; font-variant-numeric: tabular-nums; }
   .kpi .sub { font-size: 11px; color: var(--text-3); margin-top: 2px; }
   .kpi.clickable { cursor: pointer; }
+  .kpis.k5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .selbar { display: none; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 14px; margin-bottom: 12px; background: var(--accent-weak); border: 1px solid #c9dcf5; border-radius: var(--radius); font-size: 13px; }
+  .selbar input, .selbar select { padding: 5px 8px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); font-size: 13px; width: 120px; }
+  .selbar .sep { width: 1px; height: 18px; background: #c9dcf5; margin: 0 4px; }
+  .issue-line { font-size: 12px; color: var(--text-3); margin-top: 2px; }
   .kpi.clickable:hover { border-color: var(--line-strong); }
   .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
 
   .alerts { display: flex; flex-direction: column; }
-  .alert-row { display: grid; grid-template-columns: 20px 1fr auto 150px; gap: 10px; align-items: center; padding: 11px 0; border-top: 1px solid var(--line); }
+  .alert-row { display: grid; grid-template-columns: 20px 1fr auto 200px; gap: 10px; align-items: center; padding: 11px 0; border-top: 1px solid var(--line); }
   .alert-row:first-child { border-top: 0; }
   .alert-row .name { font-weight: 600; }
   .alert-row .desc { font-size: 12px; color: var(--text-3); margin-top: 2px; }
@@ -165,7 +170,7 @@
   .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #1d2129; color: #fff; padding: 10px 16px; border-radius: 8px; font-size: 13px; display: none; z-index: 40; max-width: 80vw; }
 
   @media (max-width: 1360px) {
-    .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .kpis, .kpis.k5 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   }
   @media (max-width: 1100px) {
     .grid-2, .report-layout { grid-template-columns: 1fr; }
@@ -183,10 +188,11 @@
 <body>
 <div class="app">
   <aside class="sidebar">
-    <div class="brand">3PL CX 콘솔</div>
-    <div class="brand-sub">화장품 물류센터 · 화주사 운영</div>
+    <div class="brand">고객사 운영 콘솔</div>
+    <div class="brand-sub">사례: 3PL 물류센터 · 화장품 화주사 60곳</div>
     <div class="nav-group">모니터링</div>
     <button class="nav-item" data-view="home"><span class="dot"></span>대시보드</button>
+    <button class="nav-item" data-view="issues"><span class="dot"></span>이슈 처리</button>
     <div class="nav-group">업무 조회</div>
     <button class="nav-item" data-view="orders"><span class="dot"></span>주문 · 출고</button>
     <button class="nav-item" data-view="shipments"><span class="dot"></span>배송</button>
@@ -227,9 +233,10 @@
 <div class="modal-bg" id="settingsModal">
   <div class="modal">
     <h3>연결 설정</h3>
-    <div class="muted">앱스 스크립트 웹 앱 URL과 API 키를 입력합니다. 이 브라우저에만 저장됩니다.</div>
+    <div class="muted">앱스 스크립트 웹 앱 URL과 API 키, 내 이름을 입력합니다. 이 브라우저에만 저장됩니다.</div>
     <div class="field">웹 앱 URL<input id="cfgUrl" placeholder="https://script.google.com/macros/s/.../exec"></div>
     <div class="field">API 키<input id="cfgKey" placeholder="key-..."></div>
+    <div class="field">내 이름<input id="cfgName" placeholder="이슈 담당자·처리 이력에 표시할 이름"></div>
     <div id="cfgMsg" class="note"></div>
     <div class="modal-actions">
       <button class="btn" id="cfgCancel">닫기</button>
@@ -254,7 +261,7 @@
 <script>
 // ───────────────────────── 상태 · 공통 ─────────────────────────
 const state = {
-  baseUrl: '', apiKey: '', meta: null, baseDate: '',
+  baseUrl: '', apiKey: '', userName: '', meta: null, baseDate: '',
   clients: [], clientMap: {}, client: '',
   view: 'home', cache: new Map(), filters: {}, pages: {},
   report: null,
@@ -287,6 +294,7 @@ const TONE = {
   ALLOCATED: 'progress', PICKING: 'progress', PICKED: 'progress', PACKING: 'progress', PACKED: 'progress', IN_TRANSIT: 'progress', OUT_FOR_DELIVERY: 'progress',
   SCHEDULED: '', ARRIVED: 'progress', INSPECTING: 'progress', REQUESTED: 'warning', PICKUP_SCHEDULED: 'progress', COLLECTED: 'progress', RECEIVED: 'progress',
   DRAFT: 'warning', CONFIRMED: 'progress', INVOICED: 'progress',
+  OPEN: 'warning', IN_PROGRESS: 'progress',
 };
 const badge = (code, label) => `<span class="badge ${TONE[code] || ''}">${esc(label || code)}</span>`;
 const flag = (tone, label) => `<span class="badge ${tone}">${esc(label)}</span>`;
@@ -335,10 +343,10 @@ const clientParam = () => (state.client ? { client_id: state.client } : {});
 
 // ───────────────────────── 연결 ─────────────────────────
 function loadConfig() {
-  try { state.baseUrl = localStorage.getItem('cx_base_url') || ''; state.apiKey = localStorage.getItem('cx_api_key') || ''; } catch (e) { /* 저장소 사용 불가 */ }
+  try { state.baseUrl = localStorage.getItem('cx_base_url') || ''; state.apiKey = localStorage.getItem('cx_api_key') || ''; state.userName = localStorage.getItem('cx_user_name') || ''; } catch (e) { /* 저장소 사용 불가 */ }
 }
 function saveConfig() {
-  try { localStorage.setItem('cx_base_url', state.baseUrl); localStorage.setItem('cx_api_key', state.apiKey); } catch (e) { /* 저장소 사용 불가 */ }
+  try { localStorage.setItem('cx_base_url', state.baseUrl); localStorage.setItem('cx_api_key', state.apiKey); localStorage.setItem('cx_user_name', state.userName); } catch (e) { /* 저장소 사용 불가 */ }
 }
 async function connect() {
   state.cache.clear();
@@ -356,7 +364,7 @@ async function connect() {
   $('mailModeChip').className = 'chip ' + (test ? 'test' : 'live');
 }
 function openSettings(msg) {
-  $('cfgUrl').value = state.baseUrl; $('cfgKey').value = state.apiKey;
+  $('cfgUrl').value = state.baseUrl; $('cfgKey').value = state.apiKey; $('cfgName').value = state.userName;
   $('cfgMsg').textContent = msg || ''; $('cfgMsg').className = 'note' + (msg ? ' warn' : '');
   $('settingsModal').style.display = 'flex';
 }
@@ -365,6 +373,7 @@ $('cfgCancel').onclick = () => ($('settingsModal').style.display = 'none');
 $('cfgSave').onclick = async () => {
   state.baseUrl = $('cfgUrl').value.trim();
   state.apiKey = $('cfgKey').value.trim();
+  state.userName = $('cfgName').value.trim();
   $('cfgMsg').textContent = '연결 중...'; $('cfgMsg').className = 'note';
   try {
     await connect(); saveConfig();
@@ -396,7 +405,7 @@ $('clientClear').onclick = () => setClient('');
 $('refreshBtn').onclick = () => { state.cache.clear(); render(); toast('데이터를 다시 불러왔습니다.'); };
 
 // ───────────────────────── 화면 이동 ─────────────────────────
-const TITLES = { home: '대시보드', orders: '주문 · 출고', shipments: '배송', inbounds: '입고', inventory: '재고', returns: '반품', settlements: '정산', report: '리포트 발송', schedules: '자동 발송', logs: '발송 기록', clients: '화주사 · 담당자' };
+const TITLES = { home: '대시보드', issues: '이슈 처리', orders: '주문 · 출고', shipments: '배송', inbounds: '입고', inventory: '재고', returns: '반품', settlements: '정산', report: '리포트 발송', schedules: '자동 발송', logs: '발송 기록', clients: '화주사 · 담당자' };
 document.querySelectorAll('.nav-item').forEach((b) => (b.onclick = () => go(b.dataset.view)));
 function go(view, presetFilters, reportPreset) {
   state.view = view;
@@ -409,7 +418,7 @@ function render() {
   document.querySelectorAll('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.view === state.view));
   $('pageTitle').textContent = TITLES[state.view];
   if (!state.meta) { $('view').innerHTML = '<div class="empty">상단의 연결 설정에서 웹 앱 URL과 API 키를 입력해 주세요.</div>'; return; }
-  const fn = { home: renderHome, report: renderReport, schedules: renderSchedules, logs: renderLogs, clients: renderClients }[state.view] || (() => renderList(state.view));
+  const fn = { home: renderHome, issues: renderIssues, report: renderReport, schedules: renderSchedules, logs: renderLogs, clients: renderClients }[state.view] || (() => renderList(state.view));
   fn().catch((e) => { $('view').innerHTML = `<div class="error-box">데이터를 불러오지 못했습니다. ${esc(e.message)}</div>`; });
 }
 
@@ -421,8 +430,13 @@ async function renderHome() {
   const cp = clientParam();
   const sum = (rows, f) => rows.reduce((s, r) => s + f(r), 0);
   // 대시보드 API 한 번으로 오늘 요약(전체 화주사) · 최근 7일 추이 · 확인 필요 건수를 받음
-  const { data: dash } = await api('/v1/reports/dashboard', { date: today, ...cp });
+  // 이슈 처리 현황은 따로 불러오고, 실패해도 대시보드는 표시
+  const [{ data: dash }, issueRes] = await Promise.all([
+    api('/v1/reports/dashboard', { date: today, ...cp }),
+    api('/v1/issues', { ...cp, status: 'OPEN,IN_PROGRESS', page_size: 1 }, false).catch(() => null),
+  ]);
   if (token !== render._token) return;
+  const is = issueRes ? issueRes.meta.summary : null;
   const todayRows = dash.summaries;
   const scope = state.client ? todayRows.filter((r) => r.client_id === state.client) : todayRows;
   const k = {
@@ -439,12 +453,12 @@ async function renderHome() {
       <div class="value">${num(value)}</div><div class="sub">${sub}</div>
     </div>`;
   const alerts = [
-    { key: 'outbound_delay', name: '출고지연 · 미출고', desc: '출고 약속일이 지났는데 아직 출고되지 않은 주문', count: dash.alerts.outbound_delay, tone: 'critical', view: 'orders', filters: { is_delayed: 'true', status: 'ALLOCATED,PICKING,PICKED,PACKING,PACKED' } },
-    { key: 'delivery_failed', name: '배송실패', desc: '배송실패 후 재배송 전인 운송장', count: dash.alerts.delivery_failed, tone: 'critical', view: 'shipments', filters: { status: 'DELIVERY_FAILED' } },
-    { key: null, name: '출고보류', desc: '재고부족·주소확인으로 출고가 멈춘 주문', count: dash.alerts.hold, tone: 'serious', view: 'orders', filters: { status: 'HOLD' } },
-    { key: 'stock_alert', name: '안전재고 미달', desc: '가용재고가 안전재고보다 적은 SKU', count: dash.alerts.stock_alert, tone: 'warning', view: 'inventory', filters: { is_low_stock: 'true' } },
-    { key: 'expiry_alert', name: '사용기한 임박', desc: '사용기한이 180일 미만 남은 SKU', count: dash.alerts.expiry_alert, tone: 'warning', view: 'inventory', filters: { is_expiry_near: 'true' } },
-    { key: 'inbound_issue', name: '입고 이슈 (최근 7일)', desc: '수량불일치·파손·사용기한 미달 입고', count: dash.alerts.inbound_issue, tone: 'warning', view: 'inbounds', filters: { has_issue: 'true', date_from: addDays(today, -7), date_to: today } },
+    { key: 'outbound_delay', issue: 'OUTBOUND_DELAY', name: '출고지연 · 미출고', desc: '출고 약속일이 지났는데 아직 출고되지 않은 주문', count: dash.alerts.outbound_delay, tone: 'critical', view: 'orders', filters: { is_delayed: 'true', status: 'ALLOCATED,PICKING,PICKED,PACKING,PACKED' } },
+    { key: 'delivery_failed', issue: 'DELIVERY_FAILED', name: '배송실패', desc: '배송실패 후 재배송 전인 운송장', count: dash.alerts.delivery_failed, tone: 'critical', view: 'shipments', filters: { status: 'DELIVERY_FAILED' } },
+    { key: null, issue: 'HOLD', name: '출고보류', desc: '재고부족·주소확인으로 출고가 멈춘 주문', count: dash.alerts.hold, tone: 'serious', view: 'orders', filters: { status: 'HOLD' } },
+    { key: 'stock_alert', issue: 'LOW_STOCK', name: '안전재고 미달', desc: '가용재고가 안전재고보다 적은 SKU', count: dash.alerts.stock_alert, tone: 'warning', view: 'inventory', filters: { is_low_stock: 'true' } },
+    { key: 'expiry_alert', issue: 'EXPIRY_NEAR', name: '사용기한 임박', desc: '사용기한이 180일 미만 남은 SKU', count: dash.alerts.expiry_alert, tone: 'warning', view: 'inventory', filters: { is_expiry_near: 'true' } },
+    { key: 'inbound_issue', issue: 'INBOUND_ISSUE', name: '입고 이슈 (최근 7일)', desc: '수량불일치·파손·사용기한 미달 입고', count: dash.alerts.inbound_issue, tone: 'warning', view: 'inbounds', filters: { has_issue: 'true', date_from: addDays(today, -7), date_to: today } },
   ];
   const trend = dash.trend;
 
@@ -463,14 +477,18 @@ async function renderHome() {
     </div>
     <div class="grid-2">
       <div class="card">
-        <div class="section-title"><h2>확인 필요</h2><span class="muted">항목별 목록 확인과 화주사 알림 메일 작성</span></div>
+        <div class="section-title"><h2>확인 필요</h2><span class="muted">항목별 이슈 처리 · 목록 확인 · 화주사 리포트 메일 작성</span></div>
+        ${is ? `<div class="note" style="margin:-4px 0 6px">${is.last_scan_at
+          ? `이슈 미완료 ${num(is.open + is.in_progress)}건 · 처리 기한 초과 <b style="color:var(--critical)">${num(is.overdue)}</b>건 · 고객사 미안내 ${num(is.not_notified)}건 · 마지막 감지 ${dt(is.last_scan_at)}`
+          : '아직 이슈 감지를 실행하지 않았습니다. 이슈 처리 화면에서 지금 감지를 눌러 주세요.'}</div>` : ''}
         <div class="alerts">
           ${alerts.map((a, i) => `
             <div class="alert-row">
               <span class="status-dot" style="background:var(--${a.tone})"></span>
-              <div><div class="name">${a.name}</div><div class="desc">${a.desc}</div></div>
+              <div><div class="name">${a.name}</div><div class="desc">${a.desc}</div>${is && is.last_scan_at ? `<div class="issue-line">미완료 이슈 ${num(is.open_by_type[a.issue] || 0)}건</div>` : ''}</div>
               <div class="count">${num(a.count)}</div>
               <div class="alert-actions">
+                <button class="btn small" data-alert-issue="${i}">이슈</button>
                 <button class="btn small" data-alert-list="${i}">목록</button>
                 ${a.key ? `<button class="btn small" data-alert-mail="${i}">메일 작성</button>` : ''}
               </div>
@@ -496,6 +514,7 @@ async function renderHome() {
 
   $('view').querySelectorAll('[data-go]').forEach((el) => (el.onclick = () => go(el.dataset.go, JSON.parse(el.dataset.filters))));
   $('view').querySelectorAll('[data-alert-list]').forEach((el) => (el.onclick = () => { const a = alerts[el.dataset.alertList]; go(a.view, a.filters); }));
+  $('view').querySelectorAll('[data-alert-issue]').forEach((el) => (el.onclick = () => { const a = alerts[el.dataset.alertIssue]; go('issues', { ...defaultIssueFilters(), type: a.issue }); }));
   $('view').querySelectorAll('[data-alert-mail]').forEach((el) => (el.onclick = () => {
     const a = alerts[el.dataset.alertMail];
     // 화주사를 고른 상태면 개별 발송, 전체 화주사 상태면 일괄 발송으로 이동
@@ -817,7 +836,7 @@ async function renderClients() {
 }
 
 // ───────────────────────── 발송 기록 ─────────────────────────
-const TRIGGER_LABELS = { manual: '개별', bulk: '일괄', schedule: '자동' };
+const TRIGGER_LABELS = { manual: '개별', bulk: '일괄', schedule: '자동', issue: '이슈 안내', digest: '이슈 감지 알림' };
 async function renderLogs() {
   const f = (state.filters.logs = state.filters.logs || {});
   $('view').innerHTML = `<div class="filters">
@@ -829,14 +848,231 @@ async function renderLogs() {
   const data = await apiAll('/v1/mail/logs', { ...clientParam(), report_type: f.report_type || '', trigger: f.trigger || '' }, 5);
   $('logResult').innerHTML = `<div class="muted" style="margin-bottom:8px">총 ${data.length}건 · 최신순</div>` + tableHtml([
     { key: 'message_id', label: '발송번호', mono: true }, { key: 'sent_at', label: '발송일시', render: (r) => dt(r.sent_at) },
-    { key: 'trigger', label: '구분', render: (r) => esc(TRIGGER_LABELS[r.trigger] || '개별') + (r.batch_id ? `<div class="muted mono">${esc(r.batch_id)}</div>` : '') },
-    { key: 'client_id', label: '화주사', render: (r) => esc(r.client_id ? (state.clientMap[r.client_id] || {}).name || r.client_id : '-') },
+    { key: 'trigger', label: '구분', render: (r) => esc(TRIGGER_LABELS[r.trigger] || '개별') + (r.batch_id || r.issue_id ? `<div class="muted mono">${esc(r.batch_id || r.issue_id)}</div>` : '') },
+    { key: 'client_id', label: '화주사', render: (r) => esc(r.client_id ? (state.clientMap[r.client_id] || {}).name || r.client_id : r.trigger === 'digest' ? 'CX팀 (내부)' : '-') },
     { key: 'report_type', label: '리포트', render: (r) => esc(REPORT_TYPES[r.report_type] || '-') },
     { key: 'subject', label: '제목' }, { key: 'to', label: '받는 사람', render: (r) => esc(r.to.join(', ')) },
     { key: 'actual_to', label: '실제 수신', render: (r) => esc(r.actual_to.join(', ')) },
     { key: 'mode', label: '모드', render: (r) => (r.mode === 'TEST' ? flag('warning', '테스트') : flag('good', '실제 발송')) },
     { key: 'attachments', label: '첨부', render: (r) => esc(r.attachments.map((a) => a.filename).join(', ') || '-') },
   ], data, { empty: '발송 기록이 없습니다.' });
+}
+
+// ───────────────────────── 이슈 처리 ─────────────────────────
+// 이슈 = 감지된 확인 필요 건 1개(주문·운송장·SKU·입고 단위). 담당자·상태·메모·고객사 안내를 이력으로 남김
+const ISSUE_TYPES = { OUTBOUND_DELAY: '출고지연', HOLD: '출고보류', DELIVERY_FAILED: '배송실패', LOW_STOCK: '재고 부족', EXPIRY_NEAR: '사용기한 임박', INBOUND_ISSUE: '입고 이슈' };
+const ISSUE_STATUS = { OPEN: '미처리', IN_PROGRESS: '처리 중', DONE: '완료' };
+const PRIORITY = { HIGH: ['critical', '높음'], MEDIUM: ['warning', '보통'], LOW: ['', '낮음'] };
+const priorityFlag = (p) => flag(PRIORITY[p][0], PRIORITY[p][1]);
+const dueHtml = (i) => (i.status === 'DONE' ? `<span class="muted">${dt(i.closed_at)} 완료</span>` : i.is_overdue ? flag('critical', `${dt(i.due_at)} 초과`) : dt(i.due_at));
+const notifyHtml = (i) => (i.notified_at ? flag('good', `${dt(i.notified_at)} 안내`) : '<span class="muted">미안내</span>');
+
+function defaultIssueFilters() { return { status: 'OPEN,IN_PROGRESS', type: '', priority: '', owner: '', is_overdue: '', notified: '', q: '' }; }
+
+async function renderIssues() {
+  const f = (state.filters.issues = state.filters.issues || defaultIssueFilters());
+  const pg = (state.pages.issues = state.pages.issues || { page: 1 });
+  const sel = (state.issueSel = state.issueSel || new Set());
+  $('view').innerHTML = '<div class="loading">이슈를 불러오는 중입니다...</div>';
+  const token = (renderIssues._t = Symbol());
+  const res = await api('/v1/issues', { ...f, ...clientParam(), page: pg.page, page_size: 50 }, false);
+  if (token !== renderIssues._t) return;
+  const { data, meta } = res;
+  const s = meta.summary;
+  state.issueOwners = meta.owners;
+  const card = (label, value, sub, tone, preset) => `
+    <div class="kpi clickable" data-preset='${esc(JSON.stringify(preset))}'>
+      <div class="label">${tone ? `<span class="status-dot" style="background:var(--${tone})"></span>` : ''}${label}</div>
+      <div class="value">${num(value)}</div><div class="sub">${sub}</div>
+    </div>`;
+  const opt = (map, cur, all = '전체') => `<option value="">${all}</option>` + Object.entries(map).map(([k, l]) => `<option value="${k}" ${cur === k ? 'selected' : ''}>${l}</option>`).join('');
+  const statusOpts = [['OPEN,IN_PROGRESS', '미완료'], ['OPEN', '미처리'], ['IN_PROGRESS', '처리 중'], ['DONE', '완료'], ['', '전체']];
+  const scanText = s.last_scan_at ? `마지막 감지 ${dt(s.last_scan_at)}` : '아직 감지를 실행하지 않았습니다.';
+
+  $('view').innerHTML = `
+    <div class="kpis k5">
+      ${card('미처리', s.open, '담당자 확인 전', 'warning', { status: 'OPEN' })}
+      ${card('처리 중', s.in_progress, '조치 진행', 'accent', { status: 'IN_PROGRESS' })}
+      ${card('처리 기한 초과', s.overdue, '미완료 중', 'critical', { status: 'OPEN,IN_PROGRESS', is_overdue: 'true' })}
+      ${card('우선순위 높음', s.high_open, '미완료 중', 'critical', { status: 'OPEN,IN_PROGRESS', priority: 'HIGH' })}
+      ${card('고객사 미안내', s.not_notified, '미완료 중', '', { status: 'OPEN,IN_PROGRESS', notified: 'false' })}
+    </div>
+    <div class="card" style="margin-bottom:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <span class="muted" style="flex:1">${scanText} · 실행기가 매시간 자동으로 감지하고, 새 이슈가 있으면 CX팀 메일로 알립니다. 처리 기한은 우선순위 높음 4시간, 보통 24시간, 낮음 72시간입니다.</span>
+      <button class="btn" id="isScan">지금 감지</button>
+    </div>
+    <div class="filters">
+      <div class="field">상태<select data-f="status">${statusOpts.map(([v, l]) => `<option value="${v}" ${f.status === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+      <div class="field">유형<select data-f="type">${opt(ISSUE_TYPES, f.type)}</select></div>
+      <div class="field">우선순위<select data-f="priority">${opt(Object.fromEntries(Object.entries(PRIORITY).map(([k, v]) => [k, v[1]])), f.priority)}</select></div>
+      <div class="field">담당자<select data-f="owner"><option value="">전체</option>${meta.owners.map((o) => `<option ${f.owner === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select></div>
+      <div class="field">처리 기한<select data-f="is_overdue"><option value="">전체</option><option value="true" ${f.is_overdue === 'true' ? 'selected' : ''}>초과</option></select></div>
+      <div class="field">고객사 안내<select data-f="notified"><option value="">전체</option><option value="false" ${f.notified === 'false' ? 'selected' : ''}>미안내</option><option value="true" ${f.notified === 'true' ? 'selected' : ''}>안내완료</option></select></div>
+      <div class="field">검색 (내용·번호·화주사)<input data-f="q" value="${esc(f.q)}"></div>
+      <button class="btn primary" id="isSearch">조회</button><button class="btn" id="isReset">초기화</button>
+    </div>
+    <div class="selbar" id="isSelBar"></div>
+    <div class="muted" style="margin-bottom:8px">총 ${num(meta.total)}건${state.client ? ` · ${esc(state.clientMap[state.client].name)}` : ''} · 미완료 먼저, 우선순위 · 처리 기한 순</div>
+    ${tableHtml([
+      { key: 'check', label: `<input type="checkbox" id="isAll">`, render: (i) => `<input type="checkbox" data-sel="${i.issue_id}" ${sel.has(i.issue_id) ? 'checked' : ''}>` },
+      { key: 'priority', label: '우선순위', render: (i) => priorityFlag(i.priority) },
+      { key: 'type_label', label: '유형' },
+      { key: 'client_name', label: '화주사' },
+      { key: 'title', label: '내용', render: (i) => `${esc(i.title)}<div class="muted mono">${i.issue_id}</div>` },
+      { key: 'status', label: '상태', render: (i) => badge(i.status, i.status_label) },
+      { key: 'owner', label: '담당자', render: (i) => esc(i.owner || '-') },
+      { key: 'due_at', label: '처리 기한', render: dueHtml },
+      { key: 'notified_at', label: '고객사 안내', render: notifyHtml },
+    ], data, { clickable: true, empty: s.last_scan_at ? '조건에 맞는 이슈가 없습니다.' : '아직 감지한 이슈가 없습니다. 지금 감지를 눌러 주세요.' })}
+    <div class="pager"><span>${meta.page} / ${meta.total_pages} 페이지</span><span class="btns">
+      <button class="btn small" id="isPrev" ${meta.page <= 1 ? 'disabled' : ''}>이전</button>
+      <button class="btn small" id="isNext" ${meta.page >= meta.total_pages ? 'disabled' : ''}>다음</button></span></div>`;
+
+  const reload = () => renderIssues();
+  $('view').querySelectorAll('[data-preset]').forEach((el) => (el.onclick = () => { state.filters.issues = { ...defaultIssueFilters(), status: '', ...JSON.parse(el.dataset.preset) }; pg.page = 1; reload(); }));
+  $('isSearch').onclick = () => { $('view').querySelectorAll('[data-f]').forEach((el) => (f[el.dataset.f] = el.value.trim())); pg.page = 1; reload(); };
+  $('view').querySelector('input[data-f="q"]').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('isSearch').click(); });
+  $('isReset').onclick = () => { state.filters.issues = defaultIssueFilters(); pg.page = 1; sel.clear(); reload(); };
+  $('isPrev').onclick = () => { pg.page--; reload(); };
+  $('isNext').onclick = () => { pg.page++; reload(); };
+  $('isScan').onclick = async () => {
+    $('isScan').disabled = true; toast('감지 중입니다. 10초 정도 걸릴 수 있습니다.', 10000);
+    try {
+      const r = await apiPost('/v1/issues/scan', { by: state.userName });
+      toast(`감지했습니다. 새 이슈 ${r.created}건 · 자동 완료 ${r.auto_closed}건 · 미완료 ${r.open}건`);
+      reload();
+    } catch (e) { toast(`감지하지 못했습니다. ${e.message}`); $('isScan').disabled = false; }
+  };
+
+  // 선택 · 일괄 처리
+  const drawSelBar = () => {
+    const bar = $('isSelBar');
+    if (!sel.size) { bar.style.display = 'none'; return; }
+    bar.style.display = 'flex';
+    bar.innerHTML = `<b>${sel.size}건 선택</b>
+      <span class="sep"></span>담당자<input id="sbOwner" list="ownerList" placeholder="이름" value="${esc(state.userName)}"><button class="btn small" id="sbOwnerBtn">지정</button>
+      <span class="sep"></span>상태<select id="sbStatus">${Object.entries(ISSUE_STATUS).map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select><button class="btn small" id="sbStatusBtn">변경</button>
+      <span class="sep"></span><button class="btn small primary" id="sbNotify">고객사 안내 발송</button>
+      <button class="btn small" id="sbClear" style="margin-left:auto">선택 해제</button>
+      <datalist id="ownerList">${(state.issueOwners || []).map((o) => `<option value="${esc(o)}">`).join('')}</datalist>`;
+    const update = async (body, msg) => {
+      try { await apiPost('/v1/issues/update', { issue_ids: [...sel], by: state.userName, ...body }); toast(msg); sel.clear(); reload(); } catch (e) { toast(`저장하지 못했습니다. ${e.message}`); }
+    };
+    $('sbOwnerBtn').onclick = () => update({ owner: $('sbOwner').value.trim() }, `${sel.size}건의 담당자를 지정했습니다.`);
+    $('sbStatusBtn').onclick = () => update({ status: $('sbStatus').value }, `${sel.size}건의 상태를 바꿨습니다.`);
+    $('sbClear').onclick = () => { sel.clear(); $('view').querySelectorAll('[data-sel]').forEach((c) => (c.checked = false)); drawSelBar(); };
+    $('sbNotify').onclick = async () => {
+      const m = await sendMeta();
+      const ok = await confirmBox(`고객사 안내 메일 ${sel.size}건을 보낼까요?`, `이슈마다 해당 화주사 담당자에게 기본 안내 문구로 1통씩 보냅니다. 안내 문구를 고치려면 이슈를 열어 1건씩 보내 주세요.<br><br>`
+        + (m.test_mode ? `테스트 모드입니다. 처음 ${m.test_bulk_limit}건까지만 TEST_RECIPIENT 메일로 발송됩니다.` : '<b>실제 발송 모드입니다.</b> 화주사 담당자에게 메일이 발송됩니다.'), '발송');
+      if (!ok) return;
+      toast('발송 중입니다...', 8000);
+      try {
+        const r = await apiPost('/v1/issues/notify', { issue_ids: [...sel], by: state.userName });
+        const t = r.summary;
+        toast(`발송 ${t.sent}건${t.skipped_test ? ` · 테스트 생략 ${t.skipped_test}건` : ''}${t.no_recipient ? ` · 수신 담당자 없음 ${t.no_recipient}건` : ''}${t.error ? ` · 오류 ${t.error}건` : ''}`, 5000);
+        sel.clear(); reload();
+      } catch (e) { toast(`발송하지 못했습니다. ${e.message}`); }
+    };
+  };
+  const boxes = [...$('view').querySelectorAll('[data-sel]')];
+  boxes.forEach((c) => {
+    c.onclick = (e) => e.stopPropagation();
+    c.onchange = () => { if (c.checked) sel.add(c.dataset.sel); else sel.delete(c.dataset.sel); drawSelBar(); };
+  });
+  if ($('isAll')) {
+    $('isAll').checked = boxes.length > 0 && boxes.every((c) => c.checked);
+    $('isAll').onclick = (e) => e.stopPropagation();
+    $('isAll').onchange = () => { boxes.forEach((c) => { c.checked = $('isAll').checked; if (c.checked) sel.add(c.dataset.sel); else sel.delete(c.dataset.sel); }); drawSelBar(); };
+  }
+  $('view').querySelectorAll('tbody tr').forEach((tr, k) => (tr.onclick = () => openIssue(data[k].issue_id)));
+  drawSelBar();
+}
+
+async function openIssue(id) {
+  openDrawer(id, '<div class="loading">이슈를 불러오는 중입니다...</div>');
+  const token = (openIssue._t = Symbol());
+  let i, m;
+  try {
+    i = (await api(`/v1/issues/${id}`, {}, false)).data;
+    m = await sendMeta();
+  } catch (e) { $('drawerBody').innerHTML = `<div class="error-box">${esc(e.message)}</div>`; return; }
+  if (token !== openIssue._t) return;
+  const mail = i.mail;
+  const related = { OUTBOUND_DELAY: '주문 상세', HOLD: '주문 상세', DELIVERY_FAILED: '주문 상세', LOW_STOCK: '재고 목록', EXPIRY_NEAR: '재고 목록', INBOUND_ISSUE: '입고 상세' }[i.type];
+  $('drawerTitle').textContent = `${i.issue_id} · ${i.type_label}`;
+  $('drawerBody').innerHTML = `
+    ${kv([
+      ['화주사', `${esc(i.client_name)} <span class="muted">${i.client_id}</span>`], ['내용', esc(i.title)],
+      ['우선순위', priorityFlag(i.priority)], ['상태', badge(i.status, i.status_label) + (i.resolution ? ` <span class="muted">${esc(i.resolution)}</span>` : '')],
+      ['담당자', esc(i.owner || '-')], ['감지', dt(i.detected_at)], ['처리 기한', dueHtml(i)], ['고객사 안내', notifyHtml(i) + (i.notify_message_id ? ` <span class="muted mono">${esc(i.notify_message_id)}</span>` : '')],
+    ])}
+    <h4>감지 내용 <button class="btn small" id="isRelated" style="margin-left:8px">${related} 보기</button></h4>
+    ${tableHtml([{ key: 0, label: '항목' }, { key: 1, label: '내용' }], i.facts)}
+    <h4>처리</h4>
+    <div class="report-form">
+      <div class="row-2">
+        <div class="field">상태<select id="idStatus">${Object.entries(ISSUE_STATUS).map(([k, l]) => `<option value="${k}" ${i.status === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+        <div class="field">담당자<input id="idOwner" list="idOwnerList" value="${esc(i.owner || '')}" placeholder="${esc(state.userName || '이름')}"></div>
+      </div>
+      <datalist id="idOwnerList">${(state.issueOwners || []).map((o) => `<option value="${esc(o)}">`).join('')}</datalist>
+      <div class="field">처리 메모<textarea id="idMemo" placeholder="예: 화주사에 주소 확인 요청, 회신 대기"></textarea></div>
+      <div style="display:flex;gap:8px"><button class="btn" id="idMine">나에게 지정</button><button class="btn primary" id="idSave" style="flex:1">저장</button></div>
+      <div class="note" id="idNote">완료로 바꿀 때 입력한 메모가 처리 결과로 남습니다.</div>
+    </div>
+    <h4>고객사 안내 메일</h4>
+    <div class="report-form">
+      <div class="field">받는 사람 (쉼표로 구분)<input id="idTo" value="${esc(mail.to.join(', '))}"></div>
+      <div class="note" style="margin:-8px 0 10px">${esc(mail.to_basis)}</div>
+      <div class="field">제목<input value="${esc(mail.subject)}" disabled></div>
+      <div class="field">안내 문구<textarea id="idIntro" style="min-height:90px">${esc(mail.intro)}</textarea></div>
+      <div style="display:flex;gap:8px"><button class="btn" id="idPreview">미리보기</button><button class="btn primary" id="idSend" style="flex:1">${i.notified_at ? '다시 안내 발송' : '안내 메일 발송'}</button></div>
+      <div class="note ${m.test_mode ? 'warn' : ''}">${m.test_mode ? '테스트 모드: TEST_RECIPIENT 메일로만 발송됩니다.' : '실제 발송 모드: 화주사 담당자에게 발송됩니다.'} 발송하면 미처리 이슈는 처리 중으로 바뀝니다.</div>
+      <div id="idPreviewBox" class="mail-preview" style="display:none;margin-top:10px"><div class="mail-body" id="idPreviewBody"></div></div>
+    </div>
+    <h4>이력</h4>
+    <ul class="timeline">${i.history.map((h) => `<li><span class="t">${dt(h.at)}</span><span>${esc(h.text)} <span class="muted">${esc(h.by || '')}</span></span></li>`).join('')}</ul>`;
+
+  const refresh = () => { openIssue(id); if (state.view === 'issues') renderIssues(); };
+  $('isRelated').onclick = async () => {
+    const f = Object.fromEntries(i.facts);
+    if (i.type === 'LOW_STOCK' || i.type === 'EXPIRY_NEAR') { closeDrawer(); go('inventory', { q: i.ref_id }); return; }
+    if (i.type === 'INBOUND_ISSUE') { try { openInbound((await api(`/v1/inbounds/${i.ref_id}`)).data); } catch (e) { toast(e.message); } return; }
+    openOrder(f['주문번호'] || i.ref_id);
+  };
+  $('idMine').onclick = () => {
+    if (!state.userName) { toast('연결 설정에서 내 이름을 먼저 입력해 주세요.'); return; }
+    $('idOwner').value = state.userName;
+    if ($('idStatus').value === 'OPEN') $('idStatus').value = 'IN_PROGRESS';
+  };
+  $('idSave').onclick = async () => {
+    const body = { issue_ids: [id], by: state.userName, memo: $('idMemo').value.trim() };
+    if ($('idStatus').value !== i.status) body.status = $('idStatus').value;
+    if ($('idOwner').value.trim() !== (i.owner || '')) body.owner = $('idOwner').value.trim();
+    if (!body.status && body.owner == null && !body.memo) { $('idNote').textContent = '바뀐 내용이 없습니다.'; $('idNote').className = 'note warn'; return; }
+    $('idSave').disabled = true;
+    try { await apiPost('/v1/issues/update', body); toast('저장했습니다.'); refresh(); } catch (e) { $('idNote').textContent = `저장하지 못했습니다. ${e.message}`; $('idNote').className = 'note warn'; $('idSave').disabled = false; }
+  };
+  const recipients = () => $('idTo').value.split(',').map((x) => x.trim()).filter(Boolean);
+  $('idPreview').onclick = () => {
+    const box = $('idPreviewBox'); const show = box.style.display === 'none';
+    box.style.display = show ? 'block' : 'none';
+    if (show) $('idPreviewBody').innerHTML = fillIntro(mail.body_template, $('idIntro').value);
+  };
+  $('idIntro').oninput = () => { if ($('idPreviewBox').style.display !== 'none') $('idPreviewBody').innerHTML = fillIntro(mail.body_template, $('idIntro').value); };
+  $('idSend').onclick = async () => {
+    const to = recipients();
+    if (!to.length) { toast('받는 사람을 입력해 주세요.'); return; }
+    const ok = await confirmBox('고객사 안내 메일을 보낼까요?', `<b>${esc(mail.subject)}</b><br>받는 사람: ${esc(to.join(', '))}<br><br>` + (m.test_mode ? '테스트 모드입니다. TEST_RECIPIENT 메일로만 발송됩니다.' : '<b>실제 발송 모드입니다.</b>'), '발송');
+    if (!ok) return;
+    $('idSend').disabled = true;
+    try {
+      const r = await apiPost('/v1/issues/notify', { issue_ids: [id], recipients: to, intro: $('idIntro').value, by: state.userName });
+      const x = r.results[0];
+      if (x.status !== 'SENT') throw new Error(x.reason || x.status_label);
+      toast(`발송했습니다. ${x.message_id}`); refresh();
+    } catch (e) { toast(`발송하지 못했습니다. ${e.message}`); $('idSend').disabled = false; }
+  };
 }
 
 // ───────────────────────── 리포트 발송 (개별 · 일괄) ─────────────────────────
