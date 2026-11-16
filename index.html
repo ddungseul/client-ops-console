@@ -267,9 +267,23 @@
   .center-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
   .contact-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
   .cb-label { font-size: 12.5px; font-weight: 600; color: var(--text-2); margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+  .nowrap { white-space: nowrap; }
+  .cb-inq { font-size: 13px; color: var(--text-2); margin-top: 8px; line-height: 1.6; }
   .cr-list { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
   .cr-list a { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); color: var(--text); font-size: 14px; }
   .cr-list a:hover { background: var(--surface-2); text-decoration: none; }
+
+  /* 센터 문의 */
+  .field-quote { margin: 0 0 12px; padding: 12px 14px; border-left: 3px solid #c5cbd6; background: var(--surface-2); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+  .fq-head { font-size: 12.5px; color: var(--text-3); margin-bottom: 4px; }
+  .fq-head b { color: var(--text-2); }
+  .fq-body { font-size: 14px; color: var(--text); white-space: pre-wrap; line-height: 1.6; }
+  .iq-msg { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; max-width: 460px; margin-top: 2px; }
+  .order-progress.iq-steps { grid-template-columns: repeat(3, 1fr); margin-bottom: 18px; }
+  .fs-inq { font-size: 12px; color: var(--progress-text); background: var(--progress-bg); border-radius: 999px; padding: 2px 8px; }
+  .fd-inq { margin-top: 14px; }
+  .fd-inq .cr-list { margin-top: 6px; }
+  .fd-inq-title { font-size: 12.5px; font-weight: 600; color: var(--text-2); }
 
   /* 주문 진행 막대 */
   .order-progress { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin-bottom: 8px; }
@@ -325,6 +339,7 @@
     <button class="nav-item" data-view="returns"><span class="dot"></span>반품</button>
     <button class="nav-item" data-view="settlements"><span class="dot"></span>정산</button>
     <div class="nav-group">센터 협업</div>
+    <button class="nav-item" data-view="centerInquiries"><span class="dot"></span>센터 문의</button>
     <button class="nav-item" data-view="center"><span class="dot"></span>센터 요청</button>
     <button class="nav-item" data-view="centerContacts"><span class="dot"></span>센터 담당자</button>
     <div class="nav-group">화주사 커뮤니케이션</div>
@@ -548,7 +563,7 @@ $('clientClear').onclick = () => setClient('');
 $('refreshBtn').onclick = () => { state.cache.clear(); render(); toast('데이터를 다시 불러왔습니다.'); };
 
 // ───────────────────────── 화면 이동 ─────────────────────────
-const TITLES = { home: '대시보드', issues: '이슈 처리', orders: '주문 · 출고', shipments: '배송', inbounds: '입고', inventory: '재고', returns: '반품', settlements: '정산', report: '리포트 발송', schedules: '자동 발송', logs: '발송 기록', clients: '화주사 · 담당자', center: '센터 요청', centerContacts: '센터 담당자' };
+const TITLES = { home: '대시보드', issues: '이슈 처리', orders: '주문 · 출고', shipments: '배송', inbounds: '입고', inventory: '재고', returns: '반품', settlements: '정산', report: '리포트 발송', schedules: '자동 발송', logs: '발송 기록', clients: '화주사 · 담당자', center: '센터 요청', centerInquiries: '센터 문의', centerContacts: '센터 담당자' };
 document.querySelectorAll('.nav-item').forEach((b) => (b.onclick = () => go(b.dataset.view)));
 function go(view, presetFilters, reportPreset) {
   state.view = view;
@@ -561,7 +576,7 @@ function render() {
   document.querySelectorAll('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.view === state.view));
   $('pageTitle').textContent = TITLES[state.view];
   if (!state.meta) { $('view').innerHTML = '<div class="empty">상단의 연결 설정에서 웹 앱 URL과 API 키를 입력해 주세요.</div>'; return; }
-  const fn = { home: renderHome, issues: renderIssues, report: renderReport, schedules: renderSchedules, logs: renderLogs, clients: renderClients, center: renderCenter, centerContacts: renderCenterContacts }[state.view] || (() => renderList(state.view));
+  const fn = { home: renderHome, issues: renderIssues, report: renderReport, schedules: renderSchedules, logs: renderLogs, clients: renderClients, center: renderCenter, centerInquiries: renderCenterInquiries, centerContacts: renderCenterContacts }[state.view] || (() => renderList(state.view));
   fn().catch((e) => { $('view').innerHTML = `<div class="error-box">데이터를 불러오지 못했습니다. ${esc(e.message)}</div>`; });
 }
 
@@ -574,11 +589,12 @@ async function renderHome() {
   const sum = (rows, f) => rows.reduce((s, r) => s + f(r), 0);
   // 대시보드 API 한 번으로 오늘 요약(전체 화주사) · 최근 7일 추이 · 확인 필요 건수를 받음
   // 이슈 처리 현황은 따로 불러오고, 실패해도 대시보드는 표시
-  const [{ data: dash }, issueRes, flowRes] = await Promise.all([
+  const [{ data: dash }, issueRes, flowRes, , inqRes] = await Promise.all([
     api('/v1/reports/dashboard', { date: today, ...cp }),
     api('/v1/issues', { ...cp, status: 'OPEN,IN_PROGRESS', page_size: 1 }, false).catch(() => null),
     api('/v1/reports/flow', cp).catch(() => null),
     centerMeta().catch(() => null),
+    api('/v1/center/inquiries', { ...cp, status: 'RECEIVED,CLIENT_ASKED', page_size: 100 }, false).catch(() => null),
   ]);
   if (token !== render._token) return;
   const is = issueRes ? issueRes.meta.summary : null;
@@ -608,7 +624,7 @@ async function renderHome() {
   const trend = dash.trend;
 
   $('view').innerHTML = `
-    ${flowRes ? flowHtml(flowRes.data) : ''}
+    ${flowRes ? flowHtml(flowRes.data, inqRes) : ''}
     <div class="section-title"><h2>오늘 현황 · ${esc(scopeName)}</h2><span class="muted">${today} 기준 · 택배 집하 17:00</span></div>
     <div class="kpis">
       ${kpi('주문접수', k.received, '오늘 들어온 주문', '', 'orders', { date_from: today, date_to: today })}
@@ -667,7 +683,7 @@ async function renderHome() {
     go('report', null, { type: a.key, client: state.client || '', tab: state.client ? 'single' : 'bulk' });
   }));
   drawTrend(trend);
-  if (flowRes) bindFlow(flowRes.data);
+  if (flowRes) bindFlow(flowRes.data, inqRes);
   $('trendTableBtn').onclick = () => {
     const t = $('trendTable'), c = $('trendChart');
     const show = t.style.display === 'none';
@@ -989,7 +1005,7 @@ async function renderClients() {
 }
 
 // ───────────────────────── 발송 기록 ─────────────────────────
-const TRIGGER_LABELS = { manual: '개별', bulk: '일괄', schedule: '자동', issue: '이슈 안내', digest: '이슈 감지 알림', center: '센터 요청' };
+const TRIGGER_LABELS = { manual: '개별', bulk: '일괄', schedule: '자동', issue: '이슈 안내', digest: '이슈 감지 알림', center: '센터 요청', client_check: '화주사 확인 요청', center_reply: '센터 회신' };
 async function renderLogs() {
   const f = (state.filters.logs = state.filters.logs || {});
   $('view').innerHTML = `<div class="filters">
@@ -1184,8 +1200,10 @@ async function openIssue(id) {
       <div id="idPreviewBox" class="mail-preview" style="display:none;margin-top:10px"><div class="mail-body" id="idPreviewBody"></div></div>
     </div>
     <h4>센터 요청</h4>
-    ${i.center ? contactCardHtml(i.center.contact, { compact: true, note: '이슈 유형에 맞춰 자동 지정' }) + `<div class="center-actions"><button class="btn small primary" data-creq='${esc(JSON.stringify({ type: i.center.type, ref_id: i.ref_id, issue_id: i.issue_id }))}'>${esc(i.center.label)} 작성</button><button class="btn small" data-creq='${esc(JSON.stringify({ issue_id: i.issue_id }))}'>다른 요청 작성</button></div>` : ''}
+    ${i.center ? contactCardHtml(i.center.contact, { compact: true, note: '이슈 유형에 맞춰 자동 지정' }) + (i.center.cc_contact ? `<div class="note" style="margin-top:6px">참조: 센터 ${esc(i.center.cc_contact.role_label)} ${esc(i.center.cc_contact.name)} (${esc(i.center.cc_contact.email)})</div>` : '') + `<div class="center-actions"><button class="btn small primary" data-creq='${esc(JSON.stringify({ type: i.center.type, ref_id: i.ref_id, issue_id: i.issue_id }))}'>${esc(i.center.label)} 작성</button><button class="btn small" data-creq='${esc(JSON.stringify({ issue_id: i.issue_id }))}'>다른 요청 작성</button></div>` : ''}
     ${(i.center_requests || []).length ? `<div class="cr-list">${i.center_requests.map((x) => `<a href="#" data-cr="${esc(x.request_id)}"><span class="mono">${esc(x.request_id)}</span> ${esc(x.label)} ${badge(x.status, x.status_label)} <span class="muted">${x.status === 'DONE' ? '' : '회신 기한 ' + dt(x.due_at)}</span></a>`).join('')}</div>` : '<div class="note">아직 센터에 보낸 요청이 없습니다.</div>'}
+    <h4>센터 문의 <button class="btn small" data-iqnew='${esc(JSON.stringify({ ref_id: i.ref_id }))}' style="margin-left:8px">센터 문의 등록</button></h4>
+    ${iqListHtml(i.center_inquiries || [], '이 이슈와 연결된 센터 문의가 없습니다.')}
     <h4>이력</h4>
     <ul class="timeline">${i.history.map((h) => `<li><span class="t">${dt(h.at)}</span><span>${esc(h.text)} <span class="muted">${esc(h.by || '')}</span></span></li>`).join('')}</ul>`;
 
@@ -1235,8 +1253,8 @@ async function openIssue(id) {
 // 센터 담당자와 요청 양식은 처음 한 번 불러와 state.centerMeta에 보관
 async function centerMeta() {
   if (!state.centerMeta) {
-    const [c, t] = await Promise.all([api('/v1/center/contacts'), api('/v1/center/request-types')]);
-    state.centerMeta = { contacts: c.data, types: t.data, typeMap: Object.fromEntries(t.data.map((x) => [x.code, x])) };
+    const [c, t, qt] = await Promise.all([api('/v1/center/contacts'), api('/v1/center/request-types'), api('/v1/center/inquiry-types')]);
+    state.centerMeta = { contacts: c.data, types: t.data, typeMap: Object.fromEntries(t.data.map((x) => [x.code, x])), inquiryTypes: qt.data, inquiryTypeMap: Object.fromEntries(qt.data.map((x) => [x.code, x])) };
   }
   return state.centerMeta;
 }
@@ -1271,36 +1289,40 @@ document.addEventListener('click', (e) => {
 });
 
 // ── 물류 흐름판 (대시보드)
+const IQ_STAGE_FLOW_KEYS = ['inbound', 'storage', 'fulfillment', 'transit', 'return_inspect'];
 const FLOW_INFO = {
   factory: { desc: '화주사 공장·창고에서 센터로 출발 전인 입고예정 건입니다.', list: ['inbounds', { status: 'SCHEDULED' }], types: ['INBOUND_NOTICE', 'INBOUND_MISSING'] },
   inbound: { desc: '센터에 도착해 검수 중인 입고 건입니다. 검수가 끝나면 보관 재고에 더해집니다.', list: ['inbounds', { status: 'ARRIVED,INSPECTING' }], types: ['INBOUND_RECHECK', 'EXTRA_CHARGE'] },
   storage: { desc: '센터에 보관 중인 SKU입니다. 재고 미달·사용기한 임박 SKU는 화주사 입고·처리 결정이 필요합니다.', list: ['inventory', {}], types: ['STOCK_COUNT', 'EXPIRY_DISPOSAL'] },
   fulfillment: { desc: '주문 접수 후 재고 할당·피킹·패킹 중인 주문입니다. 출고보류 주문은 사유 해소 후 센터에 해제를 요청합니다.', list: ['orders', { status: 'RECEIVED,ALLOCATED,PICKING,PICKED,PACKING' }], types: ['HOLD_RELEASE', 'ORDER_CHANGE', 'SPECIAL_WORK'] },
   outbound: { desc: '패킹을 마치고 택배사 집하(17:00)를 기다리는 주문입니다. 출고 마감은 16:00입니다.', list: ['orders', { status: 'PACKED' }], types: ['DELAY_CHECK', 'SPECIAL_WORK'] },
-  transit: { desc: '택배사에 인계되어 간선 이동·배송 중인 주문입니다. 배송실패 건은 재배송을 요청합니다.', list: ['orders', { status: 'SHIPPED,IN_TRANSIT,OUT_FOR_DELIVERY,DELIVERY_FAILED' }], types: ['REDELIVERY', 'DAMAGE_CLAIM'] },
+  transit: { desc: '택배사에 인계되어 간선 이동·배송 중인 주문입니다. 배송실패·파손 건은 운송장의 택배사 영업소에 요청하고 센터 운송 담당을 참조로 넣습니다.', list: ['orders', { status: 'SHIPPED,IN_TRANSIT,OUT_FOR_DELIVERY,DELIVERY_FAILED' }], types: ['REDELIVERY', 'DAMAGE_CLAIM'] },
   delivered: { desc: '오늘 고객에게 배송이 완료된 주문입니다.', list: ['orders', { status: 'DELIVERED' }], types: ['DAMAGE_CLAIM'] },
   return_pickup: { desc: '반품 접수 후 회수 중인 건입니다.', list: ['returns', { status: 'REQUESTED,PICKUP_SCHEDULED,COLLECTED' }], types: ['RETURN_PICKUP'] },
   return_inspect: { desc: '센터에 들어와 검수 중인 반품입니다. 검수 후 재입고 또는 폐기합니다.', list: ['returns', { status: 'RECEIVED,INSPECTING' }], types: ['RETURN_RECHECK'] },
 };
-function flowStageHtml(s) {
+// 단계별 미완료 센터 문의 (센터 현장 → CX팀)
+const inqOfStage = (inq, key) => (inq ? inq.data.filter((x) => IQ_STAGE_FLOW[x.stage] === key) : []);
+function flowStageHtml(s, inq) {
   const alert = (a, tone) => (a ? `<span class="fs-alert ${a.count ? tone : ''}">${esc(a.label)} ${num(a.count)}</span>` : '');
+  const q = inqOfStage(inq, s.key).length;
   return `<button class="flow-stage" data-stage="${s.key}">
     <span class="fs-label">${esc(s.label)}</span>
     <span class="fs-count">${num(s.count)}</span>
     <span class="fs-unit">${esc(s.unit)}</span>
     <span class="fs-sub">${esc(s.sub)}</span>
-    <span class="fs-alerts">${alert(s.alert, 'critical')}${alert(s.alert2, 'warning')}</span>
+    <span class="fs-alerts">${alert(s.alert, 'critical')}${alert(s.alert2, 'warning')}${q ? `<span class="fs-inq">센터 문의 ${num(q)}</span>` : ''}</span>
   </button>`;
 }
-function flowHtml(flow) {
+function flowHtml(flow, inq) {
   return `<div class="card flow-card">
-    <div class="section-title"><h2>물류 흐름</h2><span class="muted">기준 시각 현재 단계별 건수입니다. 단계를 누르면 목록과 센터 담당자를 볼 수 있습니다.</span></div>
-    <div class="flow-track">${flow.stages.map(flowStageHtml).join('')}</div>
-    <div class="flow-return"><span class="flow-return-label">반품</span><span class="flow-return-track">${flow.returns.map(flowStageHtml).join('')}</span></div>
+    <div class="section-title"><h2>물류 흐름</h2><span class="muted">기준 시각 현재 단계별 건수입니다. 단계를 누르면 목록, 센터 담당자, 센터에서 온 문의를 볼 수 있습니다.</span></div>
+    <div class="flow-track">${flow.stages.map((s) => flowStageHtml(s, inq)).join('')}</div>
+    <div class="flow-return"><span class="flow-return-label">반품</span><span class="flow-return-track">${flow.returns.map((s) => flowStageHtml(s, inq)).join('')}</span></div>
     <div id="flowDetail" class="flow-detail" style="display:none"></div>
   </div>`;
 }
-function bindFlow(flow) {
+function bindFlow(flow, inq) {
   const all = Object.fromEntries(flow.stages.concat(flow.returns).map((s) => [s.key, s]));
   $('view').querySelectorAll('.flow-stage').forEach((b) => (b.onclick = () => {
     const open = b.classList.contains('selected');
@@ -1310,11 +1332,13 @@ function bindFlow(flow) {
     b.classList.add('selected');
     const s = all[b.dataset.stage], info = FLOW_INFO[s.key];
     const carriers = s.role === 'DELIVERY' && state.centerMeta ? state.centerMeta.contacts.filter((c) => c.role === 'CARRIER') : [];
+    const qs = inqOfStage(inq, s.key);
     box.style.display = '';
     box.innerHTML = `<div class="fd-main">
         <div class="fd-title">${esc(s.label)} <span>${num(s.count)}${esc(s.unit)}</span></div>
         <p class="fd-desc">${esc(info.desc)}</p>
         <div class="fd-buttons"><button class="btn small primary" id="fdList">목록 보기</button>${centerActionsHtml(info.types.map((t) => ({ type: t })))}</div>
+        ${IQ_STAGE_FLOW_KEYS.includes(s.key) ? `<div class="fd-inq"><div class="fd-inq-title">센터에서 온 미완료 문의 ${num(qs.length)}건</div>${iqListHtml(qs.slice(0, 4), '이 단계에서 온 미완료 센터 문의가 없습니다.')}</div>` : ''}
       </div>
       <div class="fd-contacts">${contactCardHtml(contactOf(s.role), { note: '이 단계 센터 담당자' })}
         ${carriers.length ? `<div class="fd-carriers">${carriers.map((c) => `<a href="tel:${esc(c.phone)}">${esc(c.name)} <span>${esc(c.phone)}</span></a>`).join('')}</div>` : ''}
@@ -1342,7 +1366,8 @@ function orderCenterActions(o) {
   if (before) items.push({ type: 'ORDER_CHANGE', ref_id: o.order_id }, { type: 'SPECIAL_WORK', ref_id: o.order_id });
   if (o.tracking_no && o.shipped_at) items.push({ type: 'REDELIVERY', ref_id: String(o.tracking_no) }, { type: 'DAMAGE_CLAIM', ref_id: String(o.tracking_no) });
   if (o.return_id) items.push({ type: 'RETURN_PICKUP', ref_id: o.return_id }, { type: 'RETURN_RECHECK', ref_id: o.return_id });
-  return items.length ? '<h4>센터 요청</h4>' + centerActionsHtml(items) : '';
+  return (items.length ? '<h4>센터 요청</h4>' + centerActionsHtml(items) : '')
+    + `<div class="center-actions"><button class="btn small" data-iqnew='${esc(JSON.stringify({ type: o.status === 'HOLD' ? (o.hold_reason === '재고부족' ? 'STOCK_SHORT' : 'ADDRESS_CHECK') : 'ADDRESS_CHECK', ref_id: o.order_id }))}'>센터 문의 등록</button></div>`;
 }
 
 // ── 재고 상세 (재고 목록에서 SKU를 누르면 열림)
@@ -1386,8 +1411,9 @@ async function openCenterRequestForm(pre = {}) {
     let c;
     try { c = (await api('/v1/center/compose', { type, ref_id: ref })).data; } catch (e) { $('crBody').innerHTML = `<div class="error-box">${esc(e.message)}</div>`; return; }
     const m = await sendMeta();
-    $('crBody').innerHTML = `<h4>받는 센터 담당자</h4>${contactCardHtml(c.contact, { compact: true })}
+    $('crBody').innerHTML = `<h4>받는 담당자</h4>${contactCardHtml(c.contact, { compact: true })}
       <div class="field" style="margin-top:12px">받는 사람 (쉼표로 구분)<input id="crTo" value="${esc(c.to.join(', '))}"></div>
+      <div class="field">참조${c.cc_contact ? ` <span class="muted">센터 ${esc(c.cc_contact.role_label)} ${esc(c.cc_contact.name)}</span>` : ''}<input id="crCc" value="${esc((c.cc || []).join(', '))}"></div>
       <div class="field">회신 기한<select id="crDue">${[2, 4, 24, 48].map((h) => `<option value="${h}" ${h === c.due_hours ? 'selected' : ''}>${h < 24 ? h + '시간 이내' : h / 24 + '일 이내'}</option>`).join('')}</select></div>
       <div class="field">제목<input value="${esc(c.subject)}" disabled></div>
       <div class="field">요청 내용<textarea id="crIntro" style="min-height:96px">${esc(c.intro)}</textarea></div>
@@ -1399,11 +1425,12 @@ async function openCenterRequestForm(pre = {}) {
     $('crSend').onclick = async () => {
       const to = $('crTo').value.split(',').map((x) => x.trim()).filter(Boolean);
       if (!to.length) { toast('받는 사람을 입력해 주세요.'); return; }
-      const ok = await confirmBox('센터 요청을 보낼까요?', `<b>${esc(c.subject)}</b><br>받는 사람: ${esc(to.join(', '))}<br>회신 기한: ${esc(dueText(Number($('crDue').value)))}<br><br>` + (m.test_mode ? '테스트 모드입니다. TEST_RECIPIENT 메일로만 발송됩니다.' : '<b>실제 발송 모드입니다.</b>'), '보내기');
+      const cc = $('crCc').value.split(',').map((x) => x.trim()).filter(Boolean);
+      const ok = await confirmBox('센터 요청을 보낼까요?', `<b>${esc(c.subject)}</b><br>받는 사람: ${esc(to.join(', '))}${cc.length ? '<br>참조: ' + esc(cc.join(', ')) : ''}<br>회신 기한: ${esc(dueText(Number($('crDue').value)))}<br><br>` + (m.test_mode ? '테스트 모드입니다. TEST_RECIPIENT 메일로만 발송됩니다.' : '<b>실제 발송 모드입니다.</b>'), '보내기');
       if (!ok) return;
       $('crSend').disabled = true;
       try {
-        const r = await apiPost('/v1/center/requests/send', { type, ref_id: ref, issue_id: f.issue_id, recipients: to, intro: $('crIntro').value, due_hours: Number($('crDue').value), by: state.userName });
+        const r = await apiPost('/v1/center/requests/send', { type, ref_id: ref, issue_id: f.issue_id, recipients: to, cc, intro: $('crIntro').value, due_hours: Number($('crDue').value), by: state.userName });
         toast(`센터 요청을 보냈습니다. ${r.request_id}`);
         if (state.view === 'center') renderCenter();
         if (f.issue_id) openIssue(f.issue_id); else openCenterRequest(r);
@@ -1429,7 +1456,7 @@ async function openCenterRequestById(id) {
 }
 function openCenterRequest(x) {
   openDrawer(`${x.request_id} · ${x.label}`, `${kv([
-    ['요청 업무', `${esc(x.stage)} · ${esc(x.label)}`], ['받는 담당', esc(x.role_label)], ['받는 사람', esc(x.to.join(', '))],
+    ['요청 업무', `${esc(x.stage)} · ${esc(x.label)}`], ['받는 담당', esc(x.role_label)], ['받는 사람', esc(x.to.join(', '))], ['참조', esc(x.cc.join(', ') || '-')],
     ['화주사', esc(x.client_name || '-')], ['대상', x.ref_id ? `<span class="mono">${esc(x.ref_id)}</span>` : '-'],
     ['연결 이슈', x.issue_id ? `<a href="#" id="crIssue">${esc(x.issue_id)}</a>` : '-'], ['상태', badge(x.status, x.status_label)],
     ['요청', `${dt(x.requested_at)} · ${esc(x.requested_by)}`], ['회신 기한', crDueHtml(x)],
@@ -1496,6 +1523,184 @@ async function renderCenter() {
   $('view').querySelectorAll('tbody tr').forEach((tr, k) => (tr.onclick = () => openCenterRequest(res.data[k])));
 }
 
+// ── 센터 문의 (센터 현장 → CX팀): 접수 → 화주사 확인 중 → 센터 회신 완료
+const IQ_STATUS = { RECEIVED: '접수', CLIENT_ASKED: '화주사 확인 중', ANSWERED: '센터 회신 완료' };
+const IQ_TONE = { RECEIVED: 'warning', CLIENT_ASKED: 'progress', ANSWERED: 'good' };
+const iqBadge = (x) => flag(IQ_TONE[x.status] || '', x.status_label || IQ_STATUS[x.status]);
+const iqDueHtml = (x) => (x.status === 'ANSWERED' ? `<span class="muted">${dt(x.answered_at)} 회신</span>` : x.is_overdue ? flag('critical', `${dt(x.due_at)} 초과`) : dt(x.due_at));
+const IQ_STAGE_FLOW = { 입고: 'inbound', 보관: 'storage', 출고: 'fulfillment', 배송: 'transit', 반품: 'return_inspect' };
+document.addEventListener('click', (e) => {
+  const q = e.target.closest('[data-iq]');
+  if (q) { e.preventDefault(); openInquiry(q.dataset.iq); return; }
+  const n = e.target.closest('[data-iqnew]');
+  if (n) { e.preventDefault(); openInquiryForm(JSON.parse(n.dataset.iqnew || '{}')); }
+});
+function iqListHtml(list, empty) {
+  return list.length ? `<div class="cr-list">${list.map((x) => `<a href="#" data-iq="${esc(x.inquiry_id)}"><span class="mono">${esc(x.inquiry_id)}</span> ${esc(x.label)} ${iqBadge(x)} <span class="muted">${esc(x.from_name)}${x.status === 'ANSWERED' ? '' : ' · 회신 기한 ' + dt(x.due_at)}</span></a>`).join('')}</div>` : `<div class="note">${empty}</div>`;
+}
+function quoteHtml(x) {
+  return `<div class="field-quote"><div class="fq-head"><b>${esc(x.from_name)}</b> · ${esc(x.role_label)} · ${esc(x.via)} · ${dt(x.received_at)}</div><div class="fq-body">${esc(x.message)}</div></div>`;
+}
+
+// 문의 등록 (메신저·전화·메일로 받은 문의를 기록)
+async function openInquiryForm(pre = {}) {
+  openDrawer('센터 문의 등록', '<div class="loading">문의 양식을 불러오는 중입니다...</div>');
+  let meta;
+  try { meta = await centerMeta(); } catch (e) { $('drawerBody').innerHTML = `<div class="error-box">${esc(e.message)}</div>`; return; }
+  const types = meta.inquiryTypes;
+  const f = { type: pre.type || types[0].code, ref_id: pre.ref_id || '' };
+  $('drawerBody').innerHTML = `<div class="report-form">
+      <div class="note" style="margin:0 0 14px">센터 현장에서 메신저·전화·메일로 받은 문의를 등록합니다. 같은 대상의 미처리 이슈가 있으면 자동으로 연결됩니다.</div>
+      <div class="field">문의 업무<select id="iqType">${CR_STAGES.map((st) => `<optgroup label="${st}">${types.filter((t) => t.stage === st).map((t) => `<option value="${t.code}" ${t.code === f.type ? 'selected' : ''}>${esc(t.label)} · ${esc(t.role_label)}</option>`).join('')}</optgroup>`).join('')}</select></div>
+      <div class="field"><span id="iqRefLabel">대상 번호</span><input id="iqRef" value="${esc(f.ref_id)}"></div>
+      <div class="row-2">
+        <div class="field">문의한 사람<input id="iqFrom"></div>
+        <div class="field">받은 경로<select id="iqVia">${['메신저', '전화', '메일'].map((v) => `<option>${v}</option>`).join('')}</select></div>
+      </div>
+      <div class="field">문의 내용<textarea id="iqMsg" style="min-height:110px" placeholder="센터에서 받은 내용을 그대로 적어 주세요."></textarea></div>
+      <button class="btn primary" id="iqCreate" style="width:100%">문의 등록</button>
+      <div class="note" id="iqNote"></div>
+    </div>`;
+  const sync = () => {
+    const t = meta.inquiryTypeMap[$('iqType').value];
+    const c = contactOf(t.role);
+    $('iqRefLabel').textContent = CR_REF_LABEL[t.ref_kind];
+    $('iqRef').placeholder = CR_REF_HINT[t.ref_kind];
+    $('iqFrom').placeholder = c ? `${c.name} ${c.title}` : t.role_label;
+  };
+  $('iqType').onchange = sync; sync();
+  $('iqCreate').onclick = async () => {
+    const type = $('iqType').value, ref = $('iqRef').value.trim(), msg = $('iqMsg').value.trim();
+    const note = (t) => { $('iqNote').textContent = t; $('iqNote').className = 'note warn'; };
+    if (!ref) { note(`${CR_REF_LABEL[meta.inquiryTypeMap[type].ref_kind]}를 입력해 주세요.`); return; }
+    if (!msg) { note('문의 내용을 입력해 주세요.'); return; }
+    $('iqCreate').disabled = true;
+    try {
+      const r = await apiPost('/v1/center/inquiries/create', { type, ref_id: ref, from_name: $('iqFrom').value.trim(), via: $('iqVia').value, message: msg, by: state.userName });
+      toast(`센터 문의를 등록했습니다. ${r.inquiry_id}`);
+      if (state.view === 'centerInquiries') renderCenterInquiries();
+      openInquiry(r.inquiry_id);
+    } catch (e) { note(`등록하지 못했습니다. ${e.message}`); $('iqCreate').disabled = false; }
+  };
+}
+
+// 문의 상세: 현장 문의 → 화주사 확인 요청 → 화주사 회신 기록 · 센터 회신
+async function openInquiry(id) {
+  openDrawer(id, '<div class="loading">센터 문의를 불러오는 중입니다...</div>');
+  const token = (openInquiry._t = Symbol());
+  let x, m;
+  try { [x, m] = await Promise.all([api(`/v1/center/inquiries/${id}`, {}, false).then((r) => r.data), sendMeta(), centerMeta()]); } catch (e) { $('drawerBody').innerHTML = `<div class="error-box">${esc(e.message)}</div>`; return; }
+  if (token !== openInquiry._t) return;
+  $('drawerTitle').textContent = `${x.inquiry_id} · ${x.label}`;
+  const testNote = (who) => `<div class="note ${m.test_mode ? 'warn' : ''}">${m.test_mode ? '테스트 모드: TEST_RECIPIENT 메일로만 발송됩니다.' : `실제 발송 모드: ${who}에게 발송됩니다.`}</div>`;
+  const cm = x.client_mail, am = x.answer_mail;
+  const steps = [['접수', 'RECEIVED'], ['화주사 확인 중', 'CLIENT_ASKED'], ['센터 회신 완료', 'ANSWERED']];
+  const cur = steps.findIndex((s) => s[1] === x.status);
+  const answerDefault = x.answer || (x.client_reply ? `화주사 확인 결과를 전달드립니다.\n${x.client_reply}` : '');
+  $('drawerBody').innerHTML = `
+    <div class="order-progress iq-steps">${steps.map((s, k) => `<div class="ps ${k < cur ? 'done' : ''} ${k === cur ? 'current' : ''}"><span class="ps-bar"></span><span class="ps-label">${s[0]}</span></div>`).join('')}</div>
+    ${kv([
+      ['문의 업무', `${esc(x.stage)} · ${esc(x.label)}`], ['화주사', esc(x.client_name || '-')],
+      ['대상', x.ref_id ? `<span class="mono">${esc(x.ref_id)}</span>` : '-'], ['연결 이슈', x.issue_id ? `<a href="#" id="iqIssue">${esc(x.issue_id)}</a>` : '-'],
+      ['상태', iqBadge(x)], ['담당자', esc(x.owner || '-')], ['CX 회신 기한', iqDueHtml(x)],
+    ])}
+    <h4>현장 문의</h4>${quoteHtml(x)}
+    ${contactCardHtml(x.contact, { compact: true, note: '문의한 업무의 센터 담당자' })}
+    ${x.facts.length ? `<h4>대상 정보</h4>${tableHtml([{ key: 0, label: '항목' }, { key: 1, label: '내용' }], x.facts)}` : ''}
+    ${x.status === 'ANSWERED' ? `<h4>처리 결과</h4>${kv([['화주사 회신', esc(x.client_reply || '화주사 확인 없이 CX팀이 회신')], ['센터 회신', `<span style="white-space:pre-wrap">${esc(x.answer)}</span>`], ['회신', dt(x.answered_at)]])}` : `
+    <h4>1. 화주사 확인 요청 ${x.status === 'CLIENT_ASKED' ? `<span class="muted" style="font-weight:500;margin-left:6px">${dt(x.client_asked_at)} 발송</span>` : ''}</h4>
+    <div class="report-form">
+      <div class="field">받는 사람 (화주사 담당자)<input id="iqCTo" value="${esc(cm.to.join(', '))}"></div>
+      <div class="field">제목<input value="${esc(cm.subject)}" disabled></div>
+      <div class="field">확인 요청 문구<textarea id="iqCIntro" style="min-height:90px">${esc(cm.intro)}</textarea></div>
+      <div style="display:flex;gap:8px"><button class="btn" id="iqCPrev">미리보기</button><button class="btn ${x.status === 'RECEIVED' ? 'primary' : ''}" id="iqCSend" style="flex:1">${x.status === 'CLIENT_ASKED' ? '다시 확인 요청' : '화주사에 확인 요청'}</button></div>
+      ${testNote('화주사 담당자')}
+      <div id="iqCBox" class="mail-preview" style="display:none;margin-top:10px"><div class="mail-body" id="iqCBody"></div></div>
+    </div>
+    <h4>2. 화주사 회신 기록 · 센터 회신</h4>
+    <div class="report-form">
+      <div class="field">화주사 회신 내용<textarea id="iqReply" placeholder="화주사에서 받은 답을 적어 주세요.">${esc(x.client_reply || '')}</textarea></div>
+      <div class="field">받는 사람 (센터 담당자)<input id="iqATo" value="${esc(am.to.join(', '))}"></div>
+      <div class="field">센터 회신 내용<textarea id="iqAnswer" style="min-height:100px" placeholder="화주사 확인 결과와 센터에서 처리할 내용을 적어 주세요.">${esc(answerDefault)}</textarea></div>
+      <div style="display:flex;gap:8px"><button class="btn" id="iqSaveReply">화주사 회신만 기록</button><button class="btn primary" id="iqASend" style="flex:1">센터에 회신</button></div>
+      ${testNote('센터 담당자')}
+      <div class="note" id="iqANote">화주사 확인 없이 CX팀이 답할 수 있는 문의는 바로 센터에 회신해도 됩니다.</div>
+    </div>`}
+    <h4>이력</h4><ul class="timeline">${x.history.map((h) => `<li><span class="t">${dt(h.at)}</span><span>${esc(h.text)} <span class="muted">${esc(h.by || '')}</span></span></li>`).join('')}</ul>`;
+  const refresh = () => { openInquiry(id); if (state.view === 'centerInquiries') renderCenterInquiries(); };
+  if ($('iqIssue')) $('iqIssue').onclick = (e) => { e.preventDefault(); openIssue(x.issue_id); };
+  if (x.status === 'ANSWERED') return;
+  $('iqCPrev').onclick = () => { $('iqCBox').style.display = ''; $('iqCBody').innerHTML = fillIntro(cm.body_template, $('iqCIntro').value); };
+  $('iqCSend').onclick = async () => {
+    const to = $('iqCTo').value.split(',').map((s) => s.trim()).filter(Boolean);
+    if (!to.length) { toast('받는 사람을 입력해 주세요.'); return; }
+    const ok = await confirmBox('화주사에 확인 요청을 보낼까요?', `<b>${esc(cm.subject)}</b><br>받는 사람: ${esc(to.join(', '))}<br><br>` + (m.test_mode ? '테스트 모드입니다. TEST_RECIPIENT 메일로만 발송됩니다.' : '<b>실제 발송 모드입니다.</b>'), '보내기');
+    if (!ok) return;
+    $('iqCSend').disabled = true;
+    try { await apiPost('/v1/center/inquiries/ask-client', { inquiry_id: x.inquiry_id, recipients: to, intro: $('iqCIntro').value, by: state.userName }); toast('화주사에 확인 요청을 보냈습니다.'); refresh(); }
+    catch (e) { toast(`보내지 못했습니다. ${e.message}`); $('iqCSend').disabled = false; }
+  };
+  const note = (t) => { $('iqANote').textContent = t; $('iqANote').className = 'note warn'; };
+  $('iqReply').oninput = () => { if (!x.answer) $('iqAnswer').value = $('iqReply').value.trim() ? `화주사 확인 결과를 전달드립니다.\n${$('iqReply').value.trim()}` : ''; };
+  $('iqSaveReply').onclick = async () => {
+    if (!$('iqReply').value.trim()) { note('화주사 회신 내용을 입력해 주세요.'); return; }
+    $('iqSaveReply').disabled = true;
+    try { await apiPost('/v1/center/inquiries/update', { inquiry_id: x.inquiry_id, client_reply: $('iqReply').value.trim(), by: state.userName }); toast('화주사 회신을 기록했습니다.'); refresh(); }
+    catch (e) { note(`저장하지 못했습니다. ${e.message}`); $('iqSaveReply').disabled = false; }
+  };
+  $('iqASend').onclick = async () => {
+    const to = $('iqATo').value.split(',').map((s) => s.trim()).filter(Boolean);
+    const answer = $('iqAnswer').value.trim();
+    if (!to.length) { note('받는 사람을 입력해 주세요.'); return; }
+    if (!answer) { note('센터 회신 내용을 입력해 주세요.'); return; }
+    const ok = await confirmBox('센터에 회신할까요?', `<b>${esc(am.subject)}</b><br>받는 사람: ${esc(to.join(', '))}<br><br><span style="white-space:pre-wrap">${esc(answer)}</span><br><br>` + (m.test_mode ? '테스트 모드입니다. TEST_RECIPIENT 메일로만 발송됩니다.' : '<b>실제 발송 모드입니다.</b>'), '회신');
+    if (!ok) return;
+    $('iqASend').disabled = true;
+    try { await apiPost('/v1/center/inquiries/answer', { inquiry_id: x.inquiry_id, client_reply: $('iqReply').value.trim(), answer, recipients: to, by: state.userName }); toast('센터에 회신했습니다.'); refresh(); }
+    catch (e) { note(`회신하지 못했습니다. ${e.message}`); $('iqASend').disabled = false; }
+  };
+}
+
+// 센터 문의 목록 화면
+async function renderCenterInquiries() {
+  $('view').innerHTML = '<div class="loading">센터 문의를 불러오는 중입니다...</div>';
+  const meta = await centerMeta();
+  const f = (state.filters.centerInquiries = state.filters.centerInquiries || { status: 'RECEIVED,CLIENT_ASKED', role: '', q: '' });
+  const res = await api('/v1/center/inquiries', { ...f, ...clientParam(), page_size: 100 }, false);
+  const s = res.meta.summary;
+  const card = (label, value, sub, tone, preset) => `<div class="kpi clickable" data-preset='${esc(JSON.stringify(preset))}'>
+      <div class="label">${tone ? `<span class="status-dot" style="background:var(--${tone})"></span>` : ''}${label}</div><div class="value">${num(value)}</div><div class="sub">${sub}</div></div>`;
+  const roles = [...new Map(meta.inquiryTypes.map((t) => [t.role, t.role_label])).entries()];
+  $('view').innerHTML = `
+    <div class="kpis">
+      ${card('접수', s.received, '처리 시작 전', 'warning', { status: 'RECEIVED' })}
+      ${card('화주사 확인 중', s.client_asked, '화주사 회신 대기', 'accent', { status: 'CLIENT_ASKED' })}
+      ${card('회신 기한 초과', s.overdue, '센터 회신 전', 'critical', { status: 'RECEIVED,CLIENT_ASKED', is_overdue: 'true' })}
+      ${card('센터 회신 완료', s.answered, '누적', 'good', { status: 'ANSWERED' })}
+    </div>
+    <div class="filters">
+      <div class="field">상태<select data-f="status">${[['RECEIVED,CLIENT_ASKED', '미완료'], ['RECEIVED', '접수'], ['CLIENT_ASKED', '화주사 확인 중'], ['ANSWERED', '센터 회신 완료'], ['', '전체']].map(([v, l]) => `<option value="${v}" ${f.status === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+      <div class="field">문의한 담당<select data-f="role"><option value="">전체</option>${roles.map(([k, l]) => `<option value="${k}" ${f.role === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></div>
+      <div class="field">검색 (내용·문의번호·대상·화주사)<input data-f="q" value="${esc(f.q || '')}"></div>
+      <button class="btn primary" id="iqSearch">조회</button><button class="btn" id="iqReset">초기화</button>
+      <button class="btn" data-iqnew="{}" style="margin-left:auto">센터 문의 등록</button>
+    </div>
+    <div class="muted" style="margin-bottom:8px">총 ${num(res.meta.total)}건 · 미완료는 회신 기한 순. 센터 현장에서 CX팀에 보낸 문의를 화주사에 확인하고 센터에 회신합니다.</div>
+    ${tableHtml([
+      { key: 'inquiry_id', label: '문의번호', render: (x) => `<span class="mono nowrap">${esc(x.inquiry_id)}</span>` },
+      { key: 'message', label: '문의 내용', render: (x) => `<b>${esc(x.label)}</b><div class="muted iq-msg">${esc(x.message)}</div>` },
+      { key: 'client_name', label: '화주사', render: (x) => `<span class="nowrap">${esc(x.client_name || '-')}</span>` },
+      { key: 'ref_id', label: '대상', render: (x) => (x.ref_id ? `<span class="mono nowrap">${esc(x.ref_id)}</span>` : '-') + (x.issue_id ? `<div class="muted">${esc(x.issue_id)}</div>` : '') },
+      { key: 'from_name', label: '문의한 사람', render: (x) => `${esc(x.from_name)}<div class="muted">${esc(x.via)} · ${dt(x.received_at)}</div>` },
+      { key: 'status', label: '상태', render: (x) => `<span class="nowrap">${iqBadge(x)}</span>` },
+      { key: 'due_at', label: 'CX 회신 기한', render: (x) => `<span class="nowrap">${iqDueHtml(x)}</span>` },
+    ], res.data, { clickable: true, empty: '센터 문의가 없습니다. 메신저·전화·메일로 받은 문의는 위의 센터 문의 등록에서 기록합니다.' })}`;
+  $('view').querySelectorAll('[data-preset]').forEach((el) => (el.onclick = () => { state.filters.centerInquiries = { role: '', q: '', ...JSON.parse(el.dataset.preset) }; renderCenterInquiries(); }));
+  $('iqSearch').onclick = () => { $('view').querySelectorAll('[data-f]').forEach((el) => (f[el.dataset.f] = el.value.trim())); renderCenterInquiries(); };
+  $('iqReset').onclick = () => { state.filters.centerInquiries = null; renderCenterInquiries(); };
+  $('view').querySelectorAll('tbody tr').forEach((tr, k) => (tr.onclick = () => openInquiry(res.data[k].inquiry_id)));
+}
+
 // ── 센터 담당자 화면
 async function renderCenterContacts() {
   $('view').innerHTML = '<div class="loading">센터 담당자를 불러오는 중입니다...</div>';
@@ -1503,15 +1708,17 @@ async function renderCenterContacts() {
   const staff = meta.contacts.filter((c) => c.role !== 'CARRIER');
   const carriers = meta.contacts.filter((c) => c.role === 'CARRIER');
   $('view').innerHTML = `
-    <div class="muted" style="margin-bottom:14px">경기 이천 물류센터의 업무별 담당자입니다. 담당자마다 요청할 수 있는 업무를 누르면 요청서가 열립니다.</div>
+    <div class="muted" style="margin-bottom:14px">경기 이천 물류센터의 업무별 담당자입니다. 요청할 수 있는 업무를 누르면 요청서가 열리고, 센터에서 오는 문의는 센터 문의 화면에서 처리합니다.</div>
     <div class="contact-grid">${staff.map((c) => `<div class="card contact-block">${contactCardHtml(c, { scope: true })}
-      <div class="cb-label">요청할 수 있는 업무</div>${centerActionsHtml(meta.types.filter((t) => t.role === c.role).map((t) => ({ type: t.code })))}</div>`).join('')}</div>
-    <div class="section-title" style="margin-top:28px"><h2>택배사 영업소</h2><span class="muted">재배송·사고 접수는 택배 담당을 거쳐 전달합니다</span></div>
+      <div class="cb-label">요청할 수 있는 업무${meta.types.some((t) => t.cc_role === c.role) ? ' (택배사 영업소 요청은 참조로 받음)' : ''}</div>${centerActionsHtml(meta.types.filter((t) => t.role === c.role || t.cc_role === c.role).map((t) => ({ type: t.code })))}
+      <div class="cb-label">센터에서 오는 문의</div><div class="cb-inq">${meta.inquiryTypes.filter((t) => t.role === c.role).map((t) => esc(t.label)).join(' · ') || '-'}</div></div>`).join('')}</div>
+    <div class="section-title" style="margin-top:28px"><h2>택배사 영업소</h2><span class="muted">재배송·파손·분실 사고 접수 요청은 운송장의 택배사 영업소로 보내고 센터 운송 담당을 참조로 넣습니다</span></div>
     ${tableHtml([
       { key: 'name', label: '영업소' }, { key: 'title', label: '담당' },
       { key: 'phone', label: '전화', render: (c) => `<a href="tel:${esc(c.phone)}">${esc(c.phone)}</a>` },
       { key: 'email', label: '메일', render: (c) => `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` },
       { key: 'hours', label: '운영 시간' },
+      { key: 'scope', label: '업무' },
     ], carriers)}`;
 }
 
