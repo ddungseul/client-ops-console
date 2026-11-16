@@ -189,7 +189,7 @@
 <div class="app">
   <aside class="sidebar">
     <div class="brand">고객사 운영 콘솔</div>
-    <div class="brand-sub">사례: 3PL 물류센터 · 화장품 화주사 60곳</div>
+    <div class="brand-sub">사례: 3PL 물류센터 · 화주사 100곳</div>
     <div class="nav-group">모니터링</div>
     <button class="nav-item" data-view="home"><span class="dot"></span>대시보드</button>
     <button class="nav-item" data-view="issues"><span class="dot"></span>이슈 처리</button>
@@ -458,7 +458,7 @@ async function renderHome() {
     { key: null, issue: 'HOLD', name: '출고보류', desc: '재고부족·주소확인으로 출고가 멈춘 주문', count: dash.alerts.hold, tone: 'serious', view: 'orders', filters: { status: 'HOLD' } },
     { key: 'stock_alert', issue: 'LOW_STOCK', name: '안전재고 미달', desc: '가용재고가 안전재고보다 적은 SKU', count: dash.alerts.stock_alert, tone: 'warning', view: 'inventory', filters: { is_low_stock: 'true' } },
     { key: 'expiry_alert', issue: 'EXPIRY_NEAR', name: '사용기한 임박', desc: '사용기한이 180일 미만 남은 SKU', count: dash.alerts.expiry_alert, tone: 'warning', view: 'inventory', filters: { is_expiry_near: 'true' } },
-    { key: 'inbound_issue', issue: 'INBOUND_ISSUE', name: '입고 이슈 (최근 7일)', desc: '수량불일치·파손·사용기한 미달 입고', count: dash.alerts.inbound_issue, tone: 'warning', view: 'inbounds', filters: { has_issue: 'true', date_from: addDays(today, -7), date_to: today } },
+    { key: 'inbound_issue', issue: 'INBOUND_ISSUE', name: '입고 이슈 (최근 7일)', desc: '수량불일치·파손·사용기한 미달·바코드 미부착 입고', count: dash.alerts.inbound_issue, tone: 'warning', view: 'inbounds', filters: { has_issue: 'true', date_from: addDays(today, -7), date_to: today } },
   ];
   const trend = dash.trend;
 
@@ -686,7 +686,7 @@ const LIST = {
       { key: 'sku', label: 'SKU', mono: true }, { key: 'client_name', label: '화주사' }, { key: 'product_name', label: '상품명' },
       { key: 'location', label: '로케이션', mono: true }, { key: 'qty_on_hand', label: '실재고', num: true }, { key: 'qty_allocated', label: '할당', num: true },
       { key: 'qty_available', label: '가용재고', num: true }, { key: 'safety_stock', label: '안전재고', num: true },
-      { key: 'expiry_date', label: '사용기한', render: (r) => esc(r.expiry_date) + (r.is_expiry_near ? ' ' + flag('warning', '임박') : '') },
+      { key: 'expiry_date', label: '사용기한', render: (r) => (r.expiry_date ? esc(r.expiry_date) + (r.is_expiry_near ? ' ' + flag('warning', '임박') : '') : '<span class="muted">관리 안 함</span>') },
       { key: 'is_low_stock', label: '재고', render: (r) => (r.is_low_stock ? flag('warning', '미달') : '-') },
     ],
   },
@@ -694,7 +694,7 @@ const LIST = {
     path: '/v1/returns', dateLabel: '반품 접수일',
     filters: [
       sel('반품 상태', 'status', [['', '전체'], ['REQUESTED,PICKUP_SCHEDULED,COLLECTED,RECEIVED,INSPECTING', '진행 중'], ...Object.entries(STATUS.return)]),
-      sel('반품 사유', 'reason', [['', '전체'], ...['단순 변심', '피부 트러블', '상품 불량', '오배송', '배송 중 파손'].map((c) => [c, c])]),
+      sel('반품 사유', 'reason', [['', '전체'], ...['단순 변심', '사이즈·색상 불만', '상품 불량', '오배송', '배송 중 파손'].map((c) => [c, c])]),
       sel('처리 결과', 'disposition', [['', '전체'], ['RESTOCKED', '재입고'], ['DISPOSED', '폐기']]),
     ],
     columns: [
@@ -718,7 +718,7 @@ const LIST = {
     detail: (r) => openSettlement(r),
   },
 };
-const ISSUE = { QTY_MISMATCH: '수량불일치', DAMAGED: '파손', EXPIRY_SHORT: '사용기한 미달' };
+const ISSUE = { QTY_MISMATCH: '수량불일치', DAMAGED: '파손', EXPIRY_SHORT: '사용기한 미달', BARCODE_MISSING: '바코드 미부착' };
 
 async function renderList(view) {
   const cfg = LIST[view];
@@ -809,7 +809,7 @@ function openInbound(r) {
     ['화주사', esc(r.client_name)], ['상태', badge(r.status, r.status_label)], ['입고예정일', esc(r.expected_date)],
     ['도착', dt(r.arrived_at)], ['입고완료', dt(r.completed_at)], ['이슈', r.has_issue ? flag('warning', ISSUE[r.issue_type]) + ' ' + esc(r.issue_note) : '-'],
   ]) + '<h4>품목</h4>' + tableHtml([
-    { key: 'sku', label: 'SKU', mono: true }, { key: 'product_name', label: '상품명' }, { key: 'lot_no', label: '제조번호', mono: true }, { key: 'expiry_date', label: '사용기한' },
+    { key: 'sku', label: 'SKU', mono: true }, { key: 'product_name', label: '상품명' }, { key: 'lot_no', label: 'LOT번호', mono: true }, { key: 'expiry_date', label: '사용기한' },
     { key: 'expected_qty', label: '예정', num: true }, { key: 'received_qty', label: '입고', num: true }, { key: 'defect_qty', label: '불량', num: true },
   ], r.items));
 }
