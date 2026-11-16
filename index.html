@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>3PL CX 콘솔</title>
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --surface: #ffffff;
+    --surface-2: #f8f9fa;
+    --line: #e4e6ea;
+    --line-strong: #cfd3da;
+    --text: #16181d;
+    --text-2: #4b5059;
+    --text-3: #7c828d;
+    --accent: #2a78d6;
+    --accent-weak: #e8f1fc;
+    --sidebar: #15181e;
+    --sidebar-text: #aeb4bf;
+    --series-1: #2a78d6;
+    --series-2: #eb6834;
+    --series-3: #1baf7a;
+    --good: #0ca30c;
+    --warning: #fab219;
+    --serious: #ec835a;
+    --critical: #d03b3b;
+    --radius: 10px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+    font-size: 14px;
+    color: var(--text);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); word-break: keep-all; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  a { color: var(--accent); }
+
+  .app { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
+  .sidebar { background: var(--sidebar); color: var(--sidebar-text); padding: 20px 12px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+  .brand { color: #fff; font-weight: 700; font-size: 16px; padding: 0 10px 4px; }
+  .brand-sub { font-size: 12px; padding: 0 10px 20px; color: #7d8491; }
+  .nav-group { font-size: 11px; color: #6c7380; padding: 16px 10px 6px; letter-spacing: .04em; }
+  .nav-item { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: none; border: 0; color: var(--sidebar-text); padding: 9px 10px; border-radius: 8px; }
+  .nav-item:hover { background: #222631; color: #fff; }
+  .nav-item.active { background: #2a2f3b; color: #fff; font-weight: 600; }
+  .nav-item .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .5; }
+
+  .main { min-width: 0; }
+  .topbar { display: flex; align-items: center; gap: 12px; padding: 14px 28px; background: var(--surface); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; }
+  .topbar h1 { font-size: 18px; margin: 0; flex: 1; }
+  .client-picker { position: relative; }
+  .client-picker input { width: 260px; padding: 7px 30px 7px 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); }
+  .client-picker .clear { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); border: 0; background: none; color: var(--text-3); font-size: 16px; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 4px 10px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); color: var(--text-2); white-space: nowrap; }
+  .chip.test::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--warning); }
+  .chip.live::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--critical); }
+  .btn { border: 1px solid var(--line-strong); background: var(--surface); padding: 7px 14px; border-radius: 8px; white-space: nowrap; }
+  .btn:hover { background: var(--surface-2); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { background: #2267bb; }
+  .btn.small { padding: 4px 10px; font-size: 12px; }
+  .btn:disabled { opacity: .5; cursor: default; }
+
+  .content { padding: 24px 28px 60px; }
+  .section-title { display: flex; align-items: center; justify-content: space-between; margin: 0 0 12px; }
+  .section-title h2 { font-size: 15px; margin: 0; }
+  .muted { color: var(--text-3); font-size: 12px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; }
+  .grid-2 { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .kpis { display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); gap: 10px; margin-bottom: 16px; }
+  .kpi { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 14px; min-width: 0; }
+  .kpi .label { font-size: 12px; color: var(--text-2); display: flex; align-items: center; gap: 6px; }
+  .kpi .value { font-size: 26px; font-weight: 700; margin-top: 6px; font-variant-numeric: tabular-nums; }
+  .kpi .sub { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+  .kpi.clickable { cursor: pointer; }
+  .kpi.clickable:hover { border-color: var(--line-strong); }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+
+  .alerts { display: flex; flex-direction: column; }
+  .alert-row { display: grid; grid-template-columns: 20px 1fr auto 150px; gap: 10px; align-items: center; padding: 11px 0; border-top: 1px solid var(--line); }
+  .alert-row:first-child { border-top: 0; }
+  .alert-row .name { font-weight: 600; }
+  .alert-row .desc { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+  .alert-row .count { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 36px; text-align: right; }
+  .alert-actions { display: flex; gap: 6px; justify-content: flex-end; }
+
+  .filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-bottom: 14px; }
+  .field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-2); }
+  .field input, .field select, .field textarea { padding: 7px 9px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); font-size: 13px; }
+  .field textarea { resize: vertical; min-height: 70px; }
+
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th { text-align: left; font-weight: 600; color: var(--text-2); background: var(--surface-2); padding: 9px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th.sortable { cursor: pointer; user-select: none; }
+  th.sortable:hover { color: var(--text); }
+  td { padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+  tbody tr.clickable { cursor: pointer; }
+  tbody tr.clickable:hover td { background: #fafbfc; }
+  tbody tr.selected td { background: var(--accent-weak); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+  .pager { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-size: 12px; color: var(--text-2); }
+  .pager .btns { display: flex; gap: 6px; }
+
+  .badge { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 2px 8px; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--line); white-space: nowrap; color: var(--text); }
+  .badge::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--text-3); }
+  .badge.good::before { background: var(--good); }
+  .badge.warning::before { background: var(--warning); }
+  .badge.serious::before { background: var(--serious); }
+  .badge.critical::before { background: var(--critical); }
+  .badge.progress::before { background: var(--accent); }
+
+  .chart-legend { display: flex; gap: 14px; font-size: 12px; color: var(--text-2); margin-bottom: 6px; }
+  .chart-legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .chart-legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  .chart-box { position: relative; }
+  .chart-tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 8px; padding: 8px 10px; font-size: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.08); display: none; white-space: nowrap; }
+  .chart-tip b { display: block; margin-bottom: 4px; }
+  .chart-tip div { display: flex; align-items: center; gap: 6px; }
+
+  .report-layout { display: grid; grid-template-columns: 380px 1fr; gap: 16px; align-items: start; }
+  .report-form .field { margin-bottom: 12px; }
+  .report-form .field input, .report-form .field select, .report-form .field textarea { width: 100%; }
+  .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .recipients { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px; border: 1px solid var(--line-strong); border-radius: 8px; min-height: 38px; background: var(--surface); }
+  .recipients .chip button { border: 0; background: none; padding: 0; color: var(--text-3); }
+  .recipients input { border: 0; outline: none; flex: 1; min-width: 160px; padding: 4px; font-size: 13px; }
+  .note { font-size: 12px; color: var(--text-3); margin-top: 4px; line-height: 1.5; }
+  .note.warn { color: #9a5b00; }
+  .mail-preview { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+  .mail-head { padding: 14px 18px; border-bottom: 1px solid var(--line); font-size: 13px; display: grid; grid-template-columns: 70px 1fr; row-gap: 6px; }
+  .mail-head .k { color: var(--text-3); }
+  .mail-body { padding: 18px; max-height: 640px; overflow: auto; }
+  .empty { padding: 40px; text-align: center; color: var(--text-3); }
+  .loading { padding: 40px; text-align: center; color: var(--text-3); }
+  .error-box { padding: 14px 16px; border: 1px solid #f1c4c4; background: #fdf3f3; border-radius: var(--radius); color: #8f2323; font-size: 13px; }
+
+  .drawer-bg { position: fixed; inset: 0; background: rgba(15,17,21,.35); display: none; z-index: 20; }
+  .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 100vw); background: var(--surface); box-shadow: -8px 0 30px rgba(0,0,0,.12); transform: translateX(100%); transition: transform .2s; z-index: 21; display: flex; flex-direction: column; }
+  .drawer.open { transform: none; }
+  .drawer-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--line); }
+  .drawer-head h3 { margin: 0; font-size: 16px; }
+  .drawer-body { padding: 18px 20px; overflow-y: auto; flex: 1; }
+  .kv { display: grid; grid-template-columns: 110px 1fr; row-gap: 8px; column-gap: 10px; font-size: 13px; margin-bottom: 18px; }
+  .kv .k { color: var(--text-3); }
+  .drawer h4 { font-size: 13px; margin: 18px 0 8px; }
+  .timeline { list-style: none; margin: 0; padding: 0; }
+  .timeline li { display: grid; grid-template-columns: 96px 1fr; gap: 10px; padding: 7px 0; border-left: 2px solid var(--line); padding-left: 12px; position: relative; font-size: 13px; }
+  .timeline li::before { content: ''; position: absolute; left: -5px; top: 12px; width: 8px; height: 8px; border-radius: 50%; background: var(--line-strong); }
+  .timeline li:last-child::before { background: var(--accent); }
+  .timeline .t { color: var(--text-3); font-size: 12px; }
+
+  .modal-bg { position: fixed; inset: 0; background: rgba(15,17,21,.45); display: none; align-items: center; justify-content: center; z-index: 30; }
+  .modal { background: var(--surface); border-radius: 12px; width: min(520px, 92vw); padding: 22px; }
+  .modal h3 { margin: 0 0 6px; font-size: 17px; }
+  .modal .field { margin-top: 12px; }
+  .modal .field input { width: 100%; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #1d2129; color: #fff; padding: 10px 16px; border-radius: 8px; font-size: 13px; display: none; z-index: 40; max-width: 80vw; }
+
+  @media (max-width: 1360px) {
+    .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
+  @media (max-width: 1100px) {
+    .grid-2, .report-layout { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 760px) {
+    .app { grid-template-columns: 1fr; }
+    .sidebar { position: static; height: auto; display: flex; flex-wrap: wrap; gap: 4px; }
+    .brand-sub, .nav-group { display: none; }
+    .nav-item { width: auto; }
+    .topbar { flex-wrap: wrap; }
+    .client-picker input { width: 100%; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">3PL CX 콘솔</div>
+    <div class="brand-sub">화장품 물류센터 · 화주사 운영</div>
+    <div class="nav-group">모니터링</div>
+    <button class="nav-item" data-view="home"><span class="dot"></span>대시보드</button>
+    <div class="nav-group">업무 조회</div>
+    <button class="nav-item" data-view="orders"><span class="dot"></span>주문 · 출고</button>
+    <button class="nav-item" data-view="shipments"><span class="dot"></span>배송</button>
+    <button class="nav-item" data-view="inbounds"><span class="dot"></span>입고</button>
+    <button class="nav-item" data-view="inventory"><span class="dot"></span>재고</button>
+    <button class="nav-item" data-view="returns"><span class="dot"></span>반품</button>
+    <button class="nav-item" data-view="settlements"><span class="dot"></span>정산</button>
+    <div class="nav-group">화주사 커뮤니케이션</div>
+    <button class="nav-item" data-view="report"><span class="dot"></span>리포트 발송</button>
+    <button class="nav-item" data-view="logs"><span class="dot"></span>발송 기록</button>
+    <button class="nav-item" data-view="clients"><span class="dot"></span>화주사 · 담당자</button>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <h1 id="pageTitle">대시보드</h1>
+      <div class="client-picker">
+        <input id="clientInput" list="clientList" placeholder="전체 화주사 (이름·ID 검색)">
+        <button class="clear" id="clientClear" title="전체 화주사">×</button>
+        <datalist id="clientList"></datalist>
+      </div>
+      <span class="chip" id="baseTimeChip">기준 시각 -</span>
+      <span class="chip" id="mailModeChip">메일 모드 -</span>
+      <button class="btn small" id="refreshBtn">새로고침</button>
+      <button class="btn small" id="settingsBtn">연결 설정</button>
+    </header>
+    <section class="content" id="view"></section>
+  </div>
+</div>
+
+<div class="drawer-bg" id="drawerBg"></div>
+<aside class="drawer" id="drawer">
+  <div class="drawer-head"><h3 id="drawerTitle"></h3><button class="btn small" id="drawerClose">닫기</button></div>
+  <div class="drawer-body" id="drawerBody"></div>
+</aside>
+
+<div class="modal-bg" id="settingsModal">
+  <div class="modal">
+    <h3>연결 설정</h3>
+    <div class="muted">앱스 스크립트 웹 앱 URL과 API 키를 입력합니다. 이 브라우저에만 저장됩니다.</div>
+    <div class="field">웹 앱 URL<input id="cfgUrl" placeholder="https://script.google.com/macros/s/.../exec"></div>
+    <div class="field">API 키<input id="cfgKey" placeholder="key-..."></div>
+    <div id="cfgMsg" class="note"></div>
+    <div class="modal-actions">
+      <button class="btn" id="cfgCancel">닫기</button>
+      <button class="btn primary" id="cfgSave">저장 후 연결</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="confirmModal">
+  <div class="modal">
+    <h3 id="confirmTitle"></h3>
+    <div id="confirmBody" class="note" style="font-size:13px;color:var(--text-2)"></div>
+    <div class="modal-actions">
+      <button class="btn" id="confirmNo">취소</button>
+      <button class="btn primary" id="confirmYes">발송</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ───────────────────────── 상태 · 공통 ─────────────────────────
+const state = {
+  baseUrl: '', apiKey: '', meta: null, baseDate: '',
+  clients: [], clientMap: {}, client: '',
+  view: 'home', cache: new Map(), filters: {}, pages: {},
+  report: null,
+};
+const $ = (id) => document.getElementById(id);
+const esc = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const num = (v) => (v == null || v === '' ? '-' : Number(v).toLocaleString('ko-KR'));
+const dt = (v) => (v ? String(v).slice(5, 16).replace('T', ' ') : '-');
+const d10 = (v) => (v ? String(v).slice(0, 10) : '-');
+function addDays(ymd, n) {
+  const d = new Date(ymd + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10);
+}
+function daysBetween(a, b) { return Math.round((new Date(b + 'T00:00:00Z') - new Date(a + 'T00:00:00Z')) / 86400000); }
+
+const REPORT_TYPES = {
+  daily_summary: '일일 운영 요약', outbound_delay: '출고지연 현황', delivery_failed: '배송실패 현황',
+  stock_alert: '안전재고 미달 알림', expiry_alert: '사용기한 임박 알림', inbound_issue: '입고 이슈 알림',
+  return_status: '반품 처리 현황', settlement: '월 정산서',
+};
+const STATUS = {
+  order: { RECEIVED: '주문접수', ALLOCATED: '재고할당', PICKING: '피킹중', PICKED: '피킹완료', PACKING: '패킹중', PACKED: '패킹완료', SHIPPED: '출고완료', IN_TRANSIT: '배송중', OUT_FOR_DELIVERY: '배송출발', DELIVERED: '배송완료', DELIVERY_FAILED: '배송실패', HOLD: '출고보류', CANCELLED: '주문취소' },
+  inbound: { SCHEDULED: '입고예정', ARRIVED: '도착', INSPECTING: '검수중', COMPLETED: '입고완료' },
+  shipment: { SHIPPED: '집하완료', IN_TRANSIT: '배송중', OUT_FOR_DELIVERY: '배송출발', DELIVERED: '배송완료', DELIVERY_FAILED: '배송실패' },
+  return: { REQUESTED: '반품접수', PICKUP_SCHEDULED: '회수예정', COLLECTED: '회수완료', RECEIVED: '센터입고', INSPECTING: '검수중', COMPLETED: '처리완료' },
+  settlement: { DRAFT: '산정중', CONFIRMED: '확정', INVOICED: '청구완료', PAID: '입금완료' },
+};
+const TONE = {
+  DELIVERED: 'good', COMPLETED: 'good', DONE: 'good', PAID: 'good', SHIPPED: 'good', RESTOCKED: 'good', SENT: 'good',
+  DELIVERY_FAILED: 'critical', HOLD: 'serious', DISPOSED: 'serious', CANCELLED: '',
+  ALLOCATED: 'progress', PICKING: 'progress', PICKED: 'progress', PACKING: 'progress', PACKED: 'progress', IN_TRANSIT: 'progress', OUT_FOR_DELIVERY: 'progress',
+  SCHEDULED: '', ARRIVED: 'progress', INSPECTING: 'progress', REQUESTED: 'warning', PICKUP_SCHEDULED: 'progress', COLLECTED: 'progress', RECEIVED: 'progress',
+  DRAFT: 'warning', CONFIRMED: 'progress', INVOICED: 'progress',
+};
+const badge = (code, label) => `<span class="badge ${TONE[code] || ''}">${esc(label || code)}</span>`;
+const flag = (tone, label) => `<span class="badge ${tone}">${esc(label)}</span>`;
+
+function toast(msg, ms = 3200) {
+  const t = $('toast'); t.textContent = msg; t.style.display = 'block';
+  clearTimeout(toast._t); toast._t = setTimeout(() => (t.style.display = 'none'), ms);
+}
+
+// ───────────────────────── API ─────────────────────────
+// 경로는 ?path= 로 전달 (웹 앱 URL 뒤에 /v1/... 를 붙이면 fetch 호출이 차단됨)
+// 앱스 스크립트는 오류여도 HTTP 200을 반환하므로 응답의 error 필드로 판단
+async function api(path, params = {}, useCache = true) {
+  const q = new URLSearchParams({ path });
+  Object.entries(params).forEach(([k, v]) => { if (v !== '' && v != null) q.set(k, v); });
+  q.set('api_key', state.apiKey);
+  const url = `${state.baseUrl}?${q}`;
+  if (useCache && state.cache.has(url)) return state.cache.get(url);
+  const p = fetch(url).then((r) => r.json()).then((j) => {
+    if (j.error) { const e = new Error(j.error.message); e.code = j.error.code; throw e; }
+    return j;
+  });
+  if (useCache) { state.cache.set(url, p); p.catch(() => state.cache.delete(url)); }
+  return p;
+}
+async function apiAll(path, params = {}, maxPages = 20) {
+  let page = 1, all = [];
+  while (true) {
+    const j = await api(path, { ...params, page, page_size: 100 });
+    all = all.concat(j.data);
+    if (page >= j.meta.total_pages || page >= maxPages) return all;
+    page++;
+  }
+}
+// 발송(POST): Content-Type을 text/plain으로 보내야 브라우저 사전 요청(CORS) 없이 전달됨
+async function apiPost(path, body) {
+  const res = await fetch(`${state.baseUrl}?path=${encodeURIComponent(path)}`, {
+    method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ ...body, api_key: state.apiKey }),
+  });
+  const j = await res.json();
+  if (j.error) throw new Error(j.error.details ? j.error.details.join(' / ') : j.error.message);
+  return j.data;
+}
+const clientParam = () => (state.client ? { client_id: state.client } : {});
+
+// ───────────────────────── 연결 ─────────────────────────
+function loadConfig() {
+  try { state.baseUrl = localStorage.getItem('cx_base_url') || ''; state.apiKey = localStorage.getItem('cx_api_key') || ''; } catch (e) { /* 저장소 사용 불가 */ }
+}
+function saveConfig() {
+  try { localStorage.setItem('cx_base_url', state.baseUrl); localStorage.setItem('cx_api_key', state.apiKey); } catch (e) { /* 저장소 사용 불가 */ }
+}
+async function connect() {
+  state.cache.clear();
+  const meta = await fetch(state.baseUrl).then((r) => r.json());
+  if (!meta.base_time) throw new Error('웹 앱 URL 응답이 올바르지 않습니다.');
+  state.meta = meta;
+  state.baseDate = meta.base_time.slice(0, 10);
+  const { data } = await api('/v1/clients', { page_size: 100 });
+  state.clients = data;
+  state.clientMap = Object.fromEntries(data.map((c) => [c.client_id, c]));
+  $('clientList').innerHTML = data.map((c) => `<option value="${esc(c.client_id + ' ' + c.name)}"></option>`).join('');
+  $('baseTimeChip').textContent = `기준 시각 ${meta.base_time.slice(0, 16).replace('T', ' ')}`;
+  const test = /^TEST/.test(meta.mail_mode);
+  $('mailModeChip').textContent = test ? '메일 테스트 모드' : '메일 실제 발송';
+  $('mailModeChip').className = 'chip ' + (test ? 'test' : 'live');
+}
+function openSettings(msg) {
+  $('cfgUrl').value = state.baseUrl; $('cfgKey').value = state.apiKey;
+  $('cfgMsg').textContent = msg || ''; $('cfgMsg').className = 'note' + (msg ? ' warn' : '');
+  $('settingsModal').style.display = 'flex';
+}
+$('settingsBtn').onclick = () => openSettings();
+$('cfgCancel').onclick = () => ($('settingsModal').style.display = 'none');
+$('cfgSave').onclick = async () => {
+  state.baseUrl = $('cfgUrl').value.trim();
+  state.apiKey = $('cfgKey').value.trim();
+  $('cfgMsg').textContent = '연결 중...'; $('cfgMsg').className = 'note';
+  try {
+    await connect(); saveConfig();
+    $('settingsModal').style.display = 'none';
+    toast(`연결되었습니다. 화주사 ${state.clients.length}곳`);
+    render();
+  } catch (e) {
+    $('cfgMsg').textContent = `연결하지 못했습니다. URL과 API 키를 확인해 주세요. (${e.message})`; $('cfgMsg').className = 'note warn';
+  }
+};
+
+// ───────────────────────── 화주사 선택 ─────────────────────────
+function applyClientInput() {
+  const v = $('clientInput').value.trim();
+  if (!v) { setClient(''); return; }
+  const id = v.split(' ')[0];
+  const c = state.clientMap[id] || state.clients.find((x) => x.name === v || x.name.includes(v));
+  if (c) setClient(c.client_id);
+}
+function setClient(id) {
+  state.client = id;
+  $('clientInput').value = id ? `${id} ${state.clientMap[id].name}` : '';
+  Object.values(state.pages).forEach((p) => (p.page = 1));
+  render();
+}
+$('clientInput').addEventListener('change', applyClientInput);
+$('clientInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') applyClientInput(); });
+$('clientClear').onclick = () => setClient('');
+$('refreshBtn').onclick = () => { state.cache.clear(); render(); toast('데이터를 다시 불러왔습니다.'); };
+
+// ───────────────────────── 화면 이동 ─────────────────────────
+const TITLES = { home: '대시보드', orders: '주문 · 출고', shipments: '배송', inbounds: '입고', inventory: '재고', returns: '반품', settlements: '정산', report: '리포트 발송', logs: '발송 기록', clients: '화주사 · 담당자' };
+document.querySelectorAll('.nav-item').forEach((b) => (b.onclick = () => go(b.dataset.view)));
+function go(view, presetFilters, reportPreset) {
+  state.view = view;
+  if (presetFilters) { state.filters[view] = presetFilters; (state.pages[view] = state.pages[view] || {}).page = 1; }
+  if (reportPreset) state.report = { ...defaultReport(), ...reportPreset };
+  render();
+  window.scrollTo(0, 0);
+}
+function render() {
+  document.querySelectorAll('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.view === state.view));
+  $('pageTitle').textContent = TITLES[state.view];
+  if (!state.meta) { $('view').innerHTML = '<div class="empty">상단의 연결 설정에서 웹 앱 URL과 API 키를 입력해 주세요.</div>'; return; }
+  const fn = { home: renderHome, report: renderReport, logs: renderLogs, clients: renderClients }[state.view] || (() => renderList(state.view));
+  fn().catch((e) => { $('view').innerHTML = `<div class="error-box">데이터를 불러오지 못했습니다. ${esc(e.message)}</div>`; });
+}
+
+// ───────────────────────── 대시보드 ─────────────────────────
+async function renderHome() {
+  const token = (render._token = Symbol());
+  $('view').innerHTML = '<div class="loading">대시보드를 불러오는 중입니다. 처음 조회는 10초 정도 걸릴 수 있습니다.</div>';
+  const today = state.baseDate;
+  const cp = clientParam();
+  const sum = (rows, f) => rows.reduce((s, r) => s + f(r), 0);
+  // 대시보드 API 한 번으로 오늘 요약(전체 화주사) · 최근 7일 추이 · 확인 필요 건수를 받음
+  const { data: dash } = await api('/v1/reports/dashboard', { date: today, ...cp });
+  if (token !== render._token) return;
+  const todayRows = dash.summaries;
+  const scope = state.client ? todayRows.filter((r) => r.client_id === state.client) : todayRows;
+  const k = {
+    received: sum(scope, (r) => r.orders.received), due: sum(scope, (r) => r.outbound.due_today),
+    shipped: sum(scope, (r) => r.outbound.shipped), notShipped: sum(scope, (r) => r.outbound.not_shipped),
+    delivered: sum(scope, (r) => r.delivery.delivered), failedToday: sum(scope, (r) => r.delivery.failed),
+    returns: sum(scope, (r) => r.current.returns_in_progress),
+    low: sum(scope, (r) => r.current.low_stock_skus.length), expiry: sum(scope, (r) => r.current.expiry_near_skus.length),
+  };
+  const scopeName = state.client ? state.clientMap[state.client].name : `전체 화주사 ${state.clients.length}곳`;
+  const kpi = (label, value, sub, tone, view, filters) => `
+    <div class="kpi ${view ? 'clickable' : ''}" ${view ? `data-go="${view}" data-filters='${esc(JSON.stringify(filters || {}))}'` : ''}>
+      <div class="label">${tone ? `<span class="status-dot" style="background:var(--${tone})"></span>` : ''}${label}</div>
+      <div class="value">${num(value)}</div><div class="sub">${sub}</div>
+    </div>`;
+  const alerts = [
+    { key: 'outbound_delay', name: '출고지연 · 미출고', desc: '출고 약속일이 지났는데 아직 출고되지 않은 주문', count: dash.alerts.outbound_delay, tone: 'critical', view: 'orders', filters: { is_delayed: 'true', status: 'ALLOCATED,PICKING,PICKED,PACKING,PACKED' } },
+    { key: 'delivery_failed', name: '배송실패', desc: '배송실패 후 재배송 전인 운송장', count: dash.alerts.delivery_failed, tone: 'critical', view: 'shipments', filters: { status: 'DELIVERY_FAILED' } },
+    { key: null, name: '출고보류', desc: '재고부족·주소확인으로 출고가 멈춘 주문', count: dash.alerts.hold, tone: 'serious', view: 'orders', filters: { status: 'HOLD' } },
+    { key: 'stock_alert', name: '안전재고 미달', desc: '가용재고가 안전재고보다 적은 SKU', count: dash.alerts.stock_alert, tone: 'warning', view: 'inventory', filters: { is_low_stock: 'true' } },
+    { key: 'expiry_alert', name: '사용기한 임박', desc: '사용기한이 180일 미만 남은 SKU', count: dash.alerts.expiry_alert, tone: 'warning', view: 'inventory', filters: { is_expiry_near: 'true' } },
+    { key: 'inbound_issue', name: '입고 이슈 (최근 7일)', desc: '수량불일치·파손·사용기한 미달 입고', count: dash.alerts.inbound_issue, tone: 'warning', view: 'inbounds', filters: { has_issue: 'true', date_from: addDays(today, -7), date_to: today } },
+  ];
+  const trend = dash.trend;
+
+  $('view').innerHTML = `
+    <div class="section-title"><h2>오늘 현황 · ${esc(scopeName)}</h2><span class="muted">${today} 기준 · 택배 집하 17:00</span></div>
+    <div class="kpis">
+      ${kpi('주문접수', k.received, '오늘 들어온 주문', '', 'orders', { date_from: today, date_to: today })}
+      ${kpi('출고대상', k.due, '오늘 출고 약속')}
+      ${kpi('미출고', k.notShipped, '출고대상 중 출고 전', '', 'orders', { status: 'ALLOCATED,PICKING,PICKED,PACKING,PACKED' })}
+      ${kpi('출고완료', k.shipped, '오늘 택배사 인계')}
+      ${kpi('배송완료', k.delivered, '오늘 배송 완료', 'good')}
+      ${kpi('배송실패', k.failedToday, '오늘 발생', 'critical', 'shipments', { has_failed: 'true', date_from: addDays(today, -7), date_to: today })}
+      ${kpi('진행 중 반품', k.returns, '처리완료 전', '', 'returns', { status: 'REQUESTED,PICKUP_SCHEDULED,COLLECTED,RECEIVED,INSPECTING' })}
+      ${kpi('재고 미달', k.low, 'SKU · 안전재고 미만', 'warning', 'inventory', { is_low_stock: 'true' })}
+      ${kpi('사용기한 임박', k.expiry, 'SKU · 180일 미만', 'warning', 'inventory', { is_expiry_near: 'true' })}
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="section-title"><h2>확인 필요</h2><span class="muted">항목별 목록 확인과 화주사 알림 메일 작성</span></div>
+        <div class="alerts">
+          ${alerts.map((a, i) => `
+            <div class="alert-row">
+              <span class="status-dot" style="background:var(--${a.tone})"></span>
+              <div><div class="name">${a.name}</div><div class="desc">${a.desc}</div></div>
+              <div class="count">${num(a.count)}</div>
+              <div class="alert-actions">
+                <button class="btn small" data-alert-list="${i}">목록</button>
+                ${a.key ? `<button class="btn small" data-alert-mail="${i}">메일 작성</button>` : ''}
+              </div>
+            </div>`).join('')}
+        </div>
+      </div>
+      <div class="card">
+        <div class="section-title"><h2>최근 7일 추이</h2><button class="btn small" id="trendTableBtn">표로 보기</button></div>
+        <div class="chart-legend">
+          <span><i style="background:var(--series-1)"></i>주문접수</span>
+          <span><i style="background:var(--series-2)"></i>출고완료</span>
+          <span><i style="background:var(--series-3)"></i>배송완료</span>
+        </div>
+        <div class="chart-box" id="trendChart"></div>
+        <div id="trendTable" style="display:none"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="section-title"><h2>화주사별 오늘 현황</h2><span class="muted">행을 누르면 해당 화주사로 필터가 바뀝니다</span></div>
+      <div class="filters"><div class="field">화주사 검색<input id="clientTableSearch" placeholder="이름 또는 ID"></div></div>
+      <div id="clientTable"></div>
+    </div>`;
+
+  $('view').querySelectorAll('[data-go]').forEach((el) => (el.onclick = () => go(el.dataset.go, JSON.parse(el.dataset.filters))));
+  $('view').querySelectorAll('[data-alert-list]').forEach((el) => (el.onclick = () => { const a = alerts[el.dataset.alertList]; go(a.view, a.filters); }));
+  $('view').querySelectorAll('[data-alert-mail]').forEach((el) => (el.onclick = () => {
+    const a = alerts[el.dataset.alertMail];
+    if (!state.client) toast('메일을 보낼 화주사를 리포트 발송 화면에서 선택해 주세요.');
+    go('report', null, { type: a.key, client: state.client || '' });
+  }));
+  drawTrend(trend);
+  $('trendTableBtn').onclick = () => {
+    const t = $('trendTable'), c = $('trendChart');
+    const show = t.style.display === 'none';
+    t.style.display = show ? 'block' : 'none'; c.style.display = show ? 'none' : 'block';
+    $('trendTableBtn').textContent = show ? '차트로 보기' : '표로 보기';
+  };
+  $('trendTable').innerHTML = tableHtml([
+    { key: 'date', label: '날짜' }, { key: 'received', label: '주문접수', num: true }, { key: 'shipped', label: '출고완료', num: true }, { key: 'delivered', label: '배송완료', num: true },
+  ], trend);
+
+  // 화주사별 표: 정렬 · 검색 · 페이지
+  const rows = todayRows.map((r) => ({
+    client_id: r.client_id, client_name: r.client_name, received: r.orders.received, due: r.outbound.due_today,
+    not_shipped: r.outbound.not_shipped, delivered: r.delivery.delivered, failed: r.delivery.failed,
+    returns: r.current.returns_in_progress, low: r.current.low_stock_skus.length, expiry: r.current.expiry_near_skus.length,
+  }));
+  const ct = { sort: 'received', dir: -1, page: 1, q: '' };
+  const cols = [
+    { key: 'client_name', label: '화주사', render: (r) => `${esc(r.client_name)} <span class="muted">${r.client_id}</span>` },
+    { key: 'received', label: '주문접수', num: true }, { key: 'due', label: '출고대상', num: true }, { key: 'not_shipped', label: '미출고', num: true },
+    { key: 'delivered', label: '배송완료', num: true }, { key: 'failed', label: '배송실패', num: true }, { key: 'returns', label: '진행 중 반품', num: true },
+    { key: 'low', label: '재고 미달', num: true }, { key: 'expiry', label: '사용기한 임박', num: true },
+  ];
+  const drawClientTable = () => {
+    let list = rows.filter((r) => !ct.q || r.client_name.includes(ct.q) || r.client_id.toLowerCase().includes(ct.q.toLowerCase()));
+    list.sort((a, b) => (a[ct.sort] > b[ct.sort] ? 1 : a[ct.sort] < b[ct.sort] ? -1 : 0) * ct.dir);
+    const size = 15, pages = Math.max(1, Math.ceil(list.length / size));
+    ct.page = Math.min(ct.page, pages);
+    const slice = list.slice((ct.page - 1) * size, ct.page * size);
+    $('clientTable').innerHTML = tableHtml(cols, slice, { sort: ct.sort, dir: ct.dir, clickable: true, selected: state.client })
+      + `<div class="pager"><span>${list.length}곳 중 ${list.length ? (ct.page - 1) * size + 1 : 0}–${Math.min(ct.page * size, list.length)}</span>
+         <span class="btns"><button class="btn small" id="ctPrev" ${ct.page <= 1 ? 'disabled' : ''}>이전</button><button class="btn small" id="ctNext" ${ct.page >= pages ? 'disabled' : ''}>다음</button></span></div>`;
+    $('clientTable').querySelectorAll('th.sortable').forEach((th) => (th.onclick = () => {
+      ct.dir = ct.sort === th.dataset.key ? -ct.dir : -1; ct.sort = th.dataset.key; drawClientTable();
+    }));
+    $('clientTable').querySelectorAll('tbody tr').forEach((tr, i) => (tr.onclick = () => setClient(slice[i].client_id)));
+    $('ctPrev').onclick = () => { ct.page--; drawClientTable(); };
+    $('ctNext').onclick = () => { ct.page++; drawClientTable(); };
+  };
+  $('clientTableSearch').oninput = (e) => { ct.q = e.target.value.trim(); ct.page = 1; drawClientTable(); };
+  drawClientTable();
+}
+
+function tableHtml(cols, rows, opt = {}) {
+  if (!rows.length) return `<div class="table-wrap"><div class="empty">${opt.empty || '조회된 데이터가 없습니다.'}</div></div>`;
+  const head = cols.map((c) => {
+    const sortable = opt.sort !== undefined;
+    const arrow = opt.sort === c.key ? (opt.dir > 0 ? ' ▲' : ' ▼') : '';
+    return `<th class="${c.num ? 'num' : ''} ${sortable ? 'sortable' : ''}" data-key="${c.key}">${c.label}${arrow}</th>`;
+  }).join('');
+  const body = rows.map((r) => {
+    const sel = opt.selected && r.client_id === opt.selected && opt.selectedKey !== false;
+    return `<tr class="${opt.clickable ? 'clickable' : ''} ${sel ? 'selected' : ''}">${cols.map((c) => {
+      const v = c.render ? c.render(r) : c.num ? num(r[c.key]) : esc(r[c.key] == null ? '-' : r[c.key]);
+      return `<td class="${c.num ? 'num' : ''} ${c.mono ? 'mono' : ''}">${v}</td>`;
+    }).join('')}</tr>`;
+  }).join('');
+  return `<div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+}
+
+// 최근 7일 추이: 묶은 막대 (3계열), 마우스를 올리면 날짜별 값 표시
+function drawTrend(data) {
+  const box = $('trendChart');
+  const W = Math.max(box.clientWidth || 480, 320), H = 230, m = { t: 10, r: 8, b: 26, l: 40 };
+  const keys = [['received', '주문접수', 'var(--series-1)'], ['shipped', '출고완료', 'var(--series-2)'], ['delivered', '배송완료', 'var(--series-3)']];
+  const max = Math.max(1, ...data.flatMap((d) => keys.map(([k]) => d[k])));
+  const step = Math.pow(10, Math.floor(Math.log10(max)));
+  const top = Math.ceil(max / step) * step;
+  const iw = W - m.l - m.r, ih = H - m.t - m.b;
+  const gw = iw / data.length, bw = Math.min(14, (gw - 12) / 3), gap = 2;
+  const y = (v) => m.t + ih - (v / top) * ih;
+  const ticks = [0, top / 2, top];
+  let svg = `<svg width="${W}" height="${H}" role="img" aria-label="최근 7일 주문접수·출고완료·배송완료 추이">`;
+  ticks.forEach((t) => {
+    svg += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(t)}" y2="${y(t)}" stroke="#e4e6ea" stroke-width="1"/>`;
+    svg += `<text x="${m.l - 6}" y="${y(t) + 4}" text-anchor="end" font-size="11" fill="#7c828d">${num(t)}</text>`;
+  });
+  data.forEach((d, i) => {
+    const gx = m.l + i * gw + (gw - (bw * 3 + gap * 2)) / 2;
+    keys.forEach(([k, , color], j) => {
+      const h = Math.max(0, m.t + ih - y(d[k]));
+      const x = gx + j * (bw + gap), r = Math.min(4, bw / 2, h);
+      if (h > 0) svg += `<path d="M${x},${m.t + ih} V${m.t + ih - h + r} Q${x},${m.t + ih - h} ${x + r},${m.t + ih - h} H${x + bw - r} Q${x + bw},${m.t + ih - h} ${x + bw},${m.t + ih - h + r} V${m.t + ih} Z" fill="${color}"/>`;
+    });
+    svg += `<text x="${m.l + i * gw + gw / 2}" y="${H - 8}" text-anchor="middle" font-size="11" fill="#7c828d">${d.date.slice(5).replace('-', '/')}</text>`;
+    svg += `<rect x="${m.l + i * gw}" y="${m.t}" width="${gw}" height="${ih}" fill="transparent" data-i="${i}"/>`;
+  });
+  svg += '</svg><div class="chart-tip" id="trendTip"></div>';
+  box.innerHTML = svg;
+  const tip = $('trendTip');
+  box.querySelectorAll('rect[data-i]').forEach((r) => {
+    r.onmousemove = (e) => {
+      const d = data[r.dataset.i];
+      tip.innerHTML = `<b>${d.date}</b>` + keys.map(([k, label, color]) => `<div><i class="status-dot" style="background:${color}"></i>${label} ${num(d[k])}</div>`).join('');
+      const rect = box.getBoundingClientRect();
+      let left = e.clientX - rect.left + 12; if (left > W - 140) left -= 160;
+      tip.style.left = left + 'px'; tip.style.top = (e.clientY - rect.top - 10) + 'px'; tip.style.display = 'block';
+    };
+    r.onmouseleave = () => (tip.style.display = 'none');
+  });
+}
+
+// ───────────────────────── 업무 조회 화면 ─────────────────────────
+const sel = (label, key, options) => ({ label, key, type: 'select', options });
+const opts = (obj) => [['', '전체'], ...Object.entries(obj)];
+const LIST = {
+  orders: {
+    path: '/v1/orders', dateLabel: '주문일',
+    filters: [
+      sel('상태', 'status', [['', '전체'], ['ALLOCATED,PICKING,PICKED,PACKING,PACKED', '출고 전 (할당~패킹)'], ['IN_TRANSIT,OUT_FOR_DELIVERY', '배송중'], ...Object.entries(STATUS.order)]),
+      sel('출고지연', 'is_delayed', [['', '전체'], ['true', '지연만']]),
+      sel('반품', 'has_return', [['', '전체'], ['true', '반품 접수 주문']]),
+      sel('판매채널', 'channel', [['', '전체'], ...['스마트스토어', '쿠팡', '자사몰', '29CM', '카카오선물하기'].map((c) => [c, c])]),
+      { label: '검색 (주문번호·고객명·운송장)', key: 'q', type: 'text' },
+    ],
+    columns: [
+      { key: 'order_id', label: '주문번호', mono: true }, { key: 'client_name', label: '화주사' },
+      { key: 'ordered_at', label: '주문일시', render: (r) => dt(r.ordered_at) }, { key: 'channel', label: '채널' },
+      { key: 'items', label: '상품', render: (r) => esc(r.items[0].product_name) + (r.items.length > 1 ? ` <span class="muted">외 ${r.items.length - 1}</span>` : '') },
+      { key: 'status', label: '상태', render: (r) => badge(r.status, r.status_label) + (r.hold_reason ? ` <span class="muted">${esc(r.hold_reason)}</span>` : '') },
+      { key: 'promised_ship_date', label: '출고 약속일' },
+      { key: 'is_delayed', label: '출고지연', render: (r) => (r.is_delayed ? flag('critical', '지연') : '-') },
+      { key: 'tracking_no', label: '운송장번호', mono: true },
+    ],
+    detail: (r) => openOrder(r.order_id, r),
+  },
+  shipments: {
+    path: '/v1/shipments', dateLabel: '출고일',
+    filters: [
+      sel('배송 상태', 'status', opts(STATUS.shipment)),
+      sel('배송실패 이력', 'has_failed', [['', '전체'], ['true', '실패 이력 있음']]),
+      sel('택배사', 'carrier', [['', '전체'], ...['CJ대한통운', '한진택배', '롯데택배', '우체국택배'].map((c) => [c, c])]),
+    ],
+    columns: [
+      { key: 'tracking_no', label: '운송장번호', mono: true }, { key: 'order_id', label: '주문번호', mono: true }, { key: 'client_name', label: '화주사' },
+      { key: 'carrier', label: '택배사' }, { key: 'shipped_at', label: '출고일시', render: (r) => dt(r.shipped_at) },
+      { key: 'status', label: '상태', render: (r) => badge(r.status, r.status_label) },
+      { key: 'failed_reason', label: '실패 사유' }, { key: 'delivery_attempts', label: '배송 시도', num: true },
+      { key: 'delivered_at', label: '배송완료', render: (r) => dt(r.delivered_at) },
+    ],
+    detail: (r) => openOrder(r.order_id),
+  },
+  inbounds: {
+    path: '/v1/inbounds', dateLabel: '입고예정일',
+    filters: [sel('입고 상태', 'status', opts(STATUS.inbound)), sel('이슈', 'has_issue', [['', '전체'], ['true', '이슈 있음']])],
+    columns: [
+      { key: 'inbound_id', label: '입고번호', mono: true }, { key: 'client_name', label: '화주사' }, { key: 'expected_date', label: '입고예정일' },
+      { key: 'status', label: '상태', render: (r) => badge(r.status, r.status_label) },
+      { key: 'total_expected_qty', label: '예정 수량', num: true }, { key: 'total_received_qty', label: '입고 수량', num: true },
+      { key: 'issue_note', label: '이슈', render: (r) => (r.has_issue ? flag('warning', ISSUE[r.issue_type]) + ` <span class="muted">${esc(r.issue_note)}</span>` : '-') },
+    ],
+    detail: (r) => openInbound(r),
+  },
+  inventory: {
+    path: '/v1/inventory', dateLabel: null,
+    filters: [
+      sel('재고', 'is_low_stock', [['', '전체'], ['true', '안전재고 미달']]),
+      sel('사용기한', 'is_expiry_near', [['', '전체'], ['true', '180일 미만']]),
+      sel('보관', 'storage_type', [['', '전체'], ['상온', '상온'], ['항온', '항온']]),
+      { label: '검색 (상품명·SKU)', key: 'q', type: 'text' },
+    ],
+    columns: [
+      { key: 'sku', label: 'SKU', mono: true }, { key: 'client_name', label: '화주사' }, { key: 'product_name', label: '상품명' },
+      { key: 'location', label: '로케이션', mono: true }, { key: 'qty_on_hand', label: '실재고', num: true }, { key: 'qty_allocated', label: '할당', num: true },
+      { key: 'qty_available', label: '가용재고', num: true }, { key: 'safety_stock', label: '안전재고', num: true },
+      { key: 'expiry_date', label: '사용기한', render: (r) => esc(r.expiry_date) + (r.is_expiry_near ? ' ' + flag('warning', '임박') : '') },
+      { key: 'is_low_stock', label: '재고', render: (r) => (r.is_low_stock ? flag('warning', '미달') : '-') },
+    ],
+  },
+  returns: {
+    path: '/v1/returns', dateLabel: '반품 접수일',
+    filters: [
+      sel('반품 상태', 'status', [['', '전체'], ['REQUESTED,PICKUP_SCHEDULED,COLLECTED,RECEIVED,INSPECTING', '진행 중'], ...Object.entries(STATUS.return)]),
+      sel('반품 사유', 'reason', [['', '전체'], ...['단순 변심', '피부 트러블', '상품 불량', '오배송', '배송 중 파손'].map((c) => [c, c])]),
+      sel('처리 결과', 'disposition', [['', '전체'], ['RESTOCKED', '재입고'], ['DISPOSED', '폐기']]),
+    ],
+    columns: [
+      { key: 'return_id', label: '반품번호', mono: true }, { key: 'order_id', label: '주문번호', mono: true }, { key: 'client_name', label: '화주사' },
+      { key: 'requested_at', label: '접수일시', render: (r) => dt(r.requested_at) }, { key: 'reason', label: '사유' },
+      { key: 'items', label: '상품', render: (r) => esc(r.items[0].product_name) },
+      { key: 'status', label: '상태', render: (r) => badge(r.status, r.status_label) },
+      { key: 'disposition', label: '처리 결과', render: (r) => (r.disposition ? badge(r.disposition, r.disposition_label) : '-') },
+    ],
+    detail: (r) => openOrder(r.order_id),
+  },
+  settlements: {
+    path: '/v1/settlements', dateLabel: null,
+    filters: [sel('정산월', 'period', [['', '전체'], ['2026-11', '2026-11'], ['2026-10', '2026-10']]), sel('정산 상태', 'status', opts(STATUS.settlement))],
+    columns: [
+      { key: 'settlement_id', label: '정산번호', mono: true }, { key: 'client_name', label: '화주사' }, { key: 'period', label: '정산월' },
+      { key: 'status', label: '상태', render: (r) => badge(r.status, r.status_label) },
+      { key: 'subtotal', label: '공급가액', num: true }, { key: 'vat', label: '부가세', num: true }, { key: 'total_amount', label: '합계', num: true },
+      { key: 'due_date', label: '입금 기한' },
+    ],
+    detail: (r) => openSettlement(r),
+  },
+};
+const ISSUE = { QTY_MISMATCH: '수량불일치', DAMAGED: '파손', EXPIRY_SHORT: '사용기한 미달' };
+
+async function renderList(view) {
+  const cfg = LIST[view];
+  const f = (state.filters[view] = state.filters[view] || {});
+  const pg = (state.pages[view] = state.pages[view] || { page: 1 });
+  const fields = cfg.filters.map((x) => {
+    if (x.type === 'select') return `<div class="field">${x.label}<select data-f="${x.key}">${x.options.map(([v, l]) => `<option value="${esc(v)}" ${f[x.key] === v ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></div>`;
+    return `<div class="field">${x.label}<input data-f="${x.key}" value="${esc(f[x.key] || '')}"></div>`;
+  }).join('') + (cfg.dateLabel ? `
+    <div class="field">${cfg.dateLabel} 시작<input type="date" data-f="date_from" value="${esc(f.date_from || '')}"></div>
+    <div class="field">${cfg.dateLabel} 종료<input type="date" data-f="date_to" value="${esc(f.date_to || '')}"></div>` : '');
+  $('view').innerHTML = `
+    <div class="filters">${fields}<button class="btn primary" id="listSearch">조회</button><button class="btn" id="listReset">초기화</button></div>
+    <div id="listResult"><div class="loading">불러오는 중입니다...</div></div>`;
+  const readFilters = () => {
+    $('view').querySelectorAll('[data-f]').forEach((el) => { f[el.dataset.f] = el.value.trim(); });
+  };
+  $('listSearch').onclick = () => { readFilters(); pg.page = 1; load(); };
+  $('view').querySelectorAll('input[data-f]').forEach((el) => el.addEventListener('keydown', (e) => { if (e.key === 'Enter') $('listSearch').click(); }));
+  $('listReset').onclick = () => { state.filters[view] = {}; pg.page = 1; renderList(view); };
+  const load = async () => {
+    const token = (load._t = Symbol());
+    $('listResult').innerHTML = '<div class="loading">불러오는 중입니다...</div>';
+    try {
+      const j = await api(cfg.path, { ...f, ...clientParam(), page: pg.page, page_size: 50 });
+      if (token !== load._t) return;
+      const { data, meta } = j;
+      $('listResult').innerHTML = `<div class="muted" style="margin-bottom:8px">총 ${num(meta.total)}건${state.client ? ` · ${esc(state.clientMap[state.client].name)}` : ''}</div>`
+        + tableHtml(cfg.columns, data, { clickable: !!cfg.detail })
+        + `<div class="pager"><span>${meta.page} / ${meta.total_pages} 페이지</span><span class="btns">
+           <button class="btn small" id="pgPrev" ${meta.page <= 1 ? 'disabled' : ''}>이전</button>
+           <button class="btn small" id="pgNext" ${meta.page >= meta.total_pages ? 'disabled' : ''}>다음</button></span></div>`;
+      $('pgPrev').onclick = () => { pg.page--; load(); };
+      $('pgNext').onclick = () => { pg.page++; load(); };
+      if (cfg.detail) $('listResult').querySelectorAll('tbody tr').forEach((tr, i) => (tr.onclick = () => cfg.detail(data[i])));
+    } catch (e) {
+      $('listResult').innerHTML = `<div class="error-box">${esc(e.message)}</div>`;
+    }
+  };
+  load();
+}
+
+// ───────────────────────── 상세 (오른쪽 패널) ─────────────────────────
+function openDrawer(title, html) {
+  $('drawerTitle').textContent = title; $('drawerBody').innerHTML = html;
+  $('drawer').classList.add('open'); $('drawerBg').style.display = 'block';
+}
+function closeDrawer() { $('drawer').classList.remove('open'); $('drawerBg').style.display = 'none'; }
+$('drawerClose').onclick = closeDrawer; $('drawerBg').onclick = closeDrawer;
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDrawer(); });
+const kv = (pairs) => `<div class="kv">${pairs.map(([k, v]) => `<div class="k">${k}</div><div>${v == null || v === '' ? '-' : v}</div>`).join('')}</div>`;
+
+// 상세 패널: 목록에 있는 정보는 바로 표시하고, 진행 이력·배송 이력·반품은 이어서 불러옴
+// (주문 상세 API는 시트 여러 개를 읽어 처음 열 때 10초 안팎 걸림. 같은 주문은 10분간 캐시)
+function orderSummaryHtml(o) {
+  return kv([
+    ['화주사', esc(o.client_name)], ['상태', badge(o.status, o.status_label)], ['주문일시', dt(o.ordered_at)], ['판매채널', esc(o.channel)],
+    ['고객', `${esc(o.customer.name)} · ${esc(o.customer.phone)}`], ['주소', esc(o.customer.address)],
+    ['출고 약속일', esc(o.promised_ship_date)], ['출고지연', o.is_delayed ? flag('critical', '지연') + ' ' + esc(o.delay_reason) : '-'],
+    ['택배사 · 운송장', o.tracking_no ? `${esc(o.carrier)} · <span class="mono">${esc(o.tracking_no)}</span>` : '-'],
+    ['출고보류', esc(o.hold_reason)],
+  ]) + '<h4>상품</h4>' + tableHtml([{ key: 'sku', label: 'SKU', mono: true }, { key: 'product_name', label: '상품명' }, { key: 'qty', label: '수량', num: true }], o.items);
+}
+async function openOrder(id, row) {
+  const isOrderRow = row && row.customer && row.customer.phone !== undefined && row.items;
+  const head = isOrderRow ? orderSummaryHtml(row) : '';
+  openDrawer(id, head + '<div id="drawerMore"><div class="loading">진행 이력을 불러오는 중입니다. 처음 여는 주문은 10초 정도 걸릴 수 있습니다.</div></div>');
+  const myToken = (openOrder._t = Symbol());
+  try {
+    const o = (await api(`/v1/orders/${id}`)).data;
+    if (myToken !== openOrder._t) return;
+    let html = isOrderRow ? '' : orderSummaryHtml(o);
+    html += '<h4>진행 이력</h4><ul class="timeline">' + o.timeline.map((t) => `<li><span class="t">${dt(t.time)}</span><span>${esc(t.description)}</span></li>`).join('') + '</ul>';
+    if (o.shipment) html += '<h4>배송 이력</h4><ul class="timeline">' + o.shipment.events.map((e) => `<li><span class="t">${dt(e.time)}</span><span>${esc(e.description)} <span class="muted">${esc(e.location)}</span></span></li>`).join('') + '</ul>';
+    if (o.return) html += '<h4>반품</h4>' + kv([
+      ['반품번호', `<span class="mono">${esc(o.return.return_id)}</span>`], ['상태', badge(o.return.status, o.return.status_label)],
+      ['사유', esc(o.return.reason)], ['배송비 부담', esc(o.return.fee_payer)], ['처리 결과', o.return.disposition_label ? esc(o.return.disposition_label) : '-'],
+      ['검수 메모', esc(o.return.inspection_note)],
+    ]);
+    if (!isOrderRow) $('drawerBody').innerHTML = html;
+    else if ($('drawerMore')) $('drawerMore').innerHTML = html;
+  } catch (e) {
+    if ($('drawerMore')) $('drawerMore').innerHTML = `<div class="error-box">${esc(e.message)}</div>`;
+  }
+}
+function openInbound(r) {
+  openDrawer(r.inbound_id, kv([
+    ['화주사', esc(r.client_name)], ['상태', badge(r.status, r.status_label)], ['입고예정일', esc(r.expected_date)],
+    ['도착', dt(r.arrived_at)], ['입고완료', dt(r.completed_at)], ['이슈', r.has_issue ? flag('warning', ISSUE[r.issue_type]) + ' ' + esc(r.issue_note) : '-'],
+  ]) + '<h4>품목</h4>' + tableHtml([
+    { key: 'sku', label: 'SKU', mono: true }, { key: 'product_name', label: '상품명' }, { key: 'lot_no', label: '제조번호', mono: true }, { key: 'expiry_date', label: '사용기한' },
+    { key: 'expected_qty', label: '예정', num: true }, { key: 'received_qty', label: '입고', num: true }, { key: 'defect_qty', label: '불량', num: true },
+  ], r.items));
+}
+function openSettlement(s) {
+  openDrawer(`${s.client_name} ${s.period} 정산`, kv([
+    ['상태', badge(s.status, s.status_label)], ['기간', `${s.period_start} ~ ${s.period_end}`], ['입금 기한', esc(s.due_date)], ['입금일', dt(s.paid_at)],
+  ]) + tableHtml([
+    { key: 'item', label: '항목' }, { key: 'unit', label: '단위' }, { key: 'qty', label: '수량', num: true }, { key: 'unit_price', label: '단가', num: true }, { key: 'amount', label: '금액', num: true },
+  ], s.lines) + kv([['공급가액', num(s.subtotal) + '원'], ['부가세', num(s.vat) + '원'], ['합계', `<b>${num(s.total_amount)}원</b>`]]).replace('class="kv"', 'class="kv" style="margin-top:14px"'));
+}
+
+// ───────────────────────── 화주사 · 담당자 ─────────────────────────
+async function renderClients() {
+  const list = state.client ? state.clients.filter((c) => c.client_id === state.client) : state.clients;
+  const rows = list.flatMap((c) => c.contacts.map((ct, i) => ({ ...ct, client_id: c.client_id, client_name: c.name, category: c.category, carrier: c.carrier, first: i === 0 })));
+  $('view').innerHTML = `<div class="muted" style="margin-bottom:8px">화주사 ${list.length}곳 · 담당자 ${rows.length}명. 리포트 발송 시 담당자별 수신 리포트를 기준으로 받는 사람이 자동 입력됩니다.</div>`
+    + tableHtml([
+      { key: 'client_name', label: '화주사', render: (r) => (r.first ? `${esc(r.client_name)} <span class="muted">${r.client_id}</span>` : '') },
+      { key: 'category', label: '품목', render: (r) => (r.first ? esc(r.category) : '') },
+      { key: 'carrier', label: '택배사', render: (r) => (r.first ? esc(r.carrier) : '') },
+      { key: 'role', label: '역할' }, { key: 'name', label: '담당자' }, { key: 'email', label: '메일', mono: true },
+      { key: 'receives', label: '수신 리포트', render: (r) => r.receives_labels.map((l) => `<span class="chip" style="margin:0 4px 4px 0">${esc(l)}</span>`).join('') },
+    ], rows);
+}
+
+// ───────────────────────── 발송 기록 ─────────────────────────
+async function renderLogs() {
+  const f = (state.filters.logs = state.filters.logs || {});
+  $('view').innerHTML = `<div class="filters">
+      <div class="field">리포트 종류<select id="logType"><option value="">전체</option>${Object.entries(REPORT_TYPES).map(([k, l]) => `<option value="${k}" ${f.report_type === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+    </div><div id="logResult"><div class="loading">불러오는 중입니다...</div></div>`;
+  $('logType').onchange = (e) => { f.report_type = e.target.value; renderLogs(); };
+  const data = await apiAll('/v1/mail/logs', { ...clientParam(), report_type: f.report_type || '' }, 5);
+  $('logResult').innerHTML = `<div class="muted" style="margin-bottom:8px">총 ${data.length}건 · 최신순</div>` + tableHtml([
+    { key: 'message_id', label: '발송번호', mono: true }, { key: 'sent_at', label: '발송일시', render: (r) => dt(r.sent_at) },
+    { key: 'client_id', label: '화주사', render: (r) => esc(r.client_id ? (state.clientMap[r.client_id] || {}).name || r.client_id : '-') },
+    { key: 'report_type', label: '리포트', render: (r) => esc(REPORT_TYPES[r.report_type] || '-') },
+    { key: 'subject', label: '제목' }, { key: 'to', label: '받는 사람', render: (r) => esc(r.to.join(', ')) },
+    { key: 'actual_to', label: '실제 수신', render: (r) => esc(r.actual_to.join(', ')) },
+    { key: 'mode', label: '모드', render: (r) => (r.mode === 'TEST' ? flag('warning', '테스트') : flag('good', '실제 발송')) },
+    { key: 'attachments', label: '첨부', render: (r) => esc(r.attachments.map((a) => a.filename).join(', ') || '-') },
+  ], data, { empty: '발송 기록이 없습니다.' });
+}
+
+// ───────────────────────── 리포트 발송 ─────────────────────────
+function defaultReport() {
+  const t = state.baseDate;
+  return {
+    type: 'daily_summary', client: state.client || '', date: t, from: addDays(t, -7), to: t, period: '2026-10',
+    to_list: [], cc_list: [], intro: '', attach: true, data: null, loadedKey: '', error: '',
+  };
+}
+const RANGE_TYPES = ['outbound_delay', 'delivery_failed', 'inbound_issue', 'return_status'];
+const SPEC = {
+  daily_summary: {
+    fetch: async (r) => (await api('/v1/reports/daily-summary', { client_id: r.client, date: r.date })).data[0],
+    rows: (d) => [
+      ['주문접수', d.orders.received], ['주문취소', d.orders.cancelled], ['출고대상', d.outbound.due_today], ['출고완료', d.outbound.shipped],
+      ['미출고', d.outbound.not_shipped], ['출고지연', d.outbound.delayed], ['배송완료', d.delivery.delivered], ['배송실패', d.delivery.failed],
+      ['입고예정', d.inbound.scheduled], ['입고완료', d.inbound.completed], ['입고 이슈', d.inbound.with_issue],
+      ['반품접수', d.returns.requested], ['반품 처리완료', d.returns.completed], ['진행 중 반품', d.current.returns_in_progress],
+      ['안전재고 미달 SKU', d.current.low_stock_skus.length], ['사용기한 임박 SKU', d.current.expiry_near_skus.length],
+    ].map(([item, value]) => ({ item, value })),
+    cols: [{ key: 'item', label: '항목' }, { key: 'value', label: '건수', num: true }],
+    intro: (r) => `${r.date} 운영 현황을 안내드립니다.`,
+    period: (r) => r.date,
+  },
+  outbound_delay: {
+    fetch: async (r) => (await apiAll('/v1/orders', { client_id: r.client, is_delayed: 'true' })).filter((o) => o.promised_ship_date >= r.from && o.promised_ship_date <= r.to),
+    cols: [{ key: 'order_id', label: '주문번호', mono: true }, { key: 'ordered_at', label: '주문일시', render: (o) => dt(o.ordered_at) }, { key: 'promised_ship_date', label: '출고 약속일' },
+      { key: 'status_label', label: '현재 상태' }, { key: 'shipped_at', label: '출고일시', render: (o) => dt(o.shipped_at) }, { key: 'delay_reason', label: '지연 사유' }],
+    intro: (r, n) => `출고 약속일 기준 ${r.from} ~ ${r.to} 출고지연 주문 ${n}건을 안내드립니다. 지연 사유를 확인해 주시고, 고객 문의 응대에 참고해 주시기 바랍니다.`,
+    none: (r) => `출고 약속일 기준 ${r.from} ~ ${r.to} 출고지연 주문은 없습니다.`,
+  },
+  delivery_failed: {
+    fetch: async (r) => apiAll('/v1/shipments', { client_id: r.client, has_failed: 'true', date_from: r.from, date_to: r.to }),
+    cols: [{ key: 'tracking_no', label: '운송장번호', mono: true }, { key: 'order_id', label: '주문번호', mono: true }, { key: 'recipient', label: '수취인', render: (s) => esc(s.recipient.name) },
+      { key: 'shipped_at', label: '출고일시', render: (s) => dt(s.shipped_at) }, { key: 'failed_reason', label: '실패 사유' }, { key: 'status_label', label: '현재 상태' }],
+    intro: (r, n) => `${r.from} ~ ${r.to} 출고분 중 배송실패 이력이 있는 ${n}건을 안내드립니다. '주소 불명' 건은 정확한 주소 확인을 요청드립니다.`,
+    none: (r) => `${r.from} ~ ${r.to} 출고분 중 배송실패 이력이 있는 운송장은 없습니다.`,
+  },
+  stock_alert: {
+    fetch: async (r) => apiAll('/v1/inventory', { client_id: r.client, is_low_stock: 'true' }),
+    cols: [{ key: 'sku', label: 'SKU', mono: true }, { key: 'product_name', label: '상품명' }, { key: 'qty_available', label: '가용재고', num: true },
+      { key: 'safety_stock', label: '안전재고', num: true }, { key: 'short', label: '부족 수량', num: true, render: (p) => num(p.safety_stock - p.qty_available) }, { key: 'last_inbound_at', label: '최근 입고일', render: (p) => d10(p.last_inbound_at) }],
+    intro: (r, n) => `${state.baseDate} 기준 가용재고가 안전재고보다 적은 SKU ${n}개를 안내드립니다. 입고 일정을 공유해 주시기 바랍니다.`,
+    none: () => `${state.baseDate} 기준 가용재고가 안전재고보다 적은 SKU는 없습니다.`,
+    period: () => state.baseDate,
+  },
+  expiry_alert: {
+    fetch: async (r) => (await apiAll('/v1/inventory', { client_id: r.client, is_expiry_near: 'true' })).map((p) => ({ ...p, days_left: daysBetween(state.baseDate, p.expiry_date) })),
+    cols: [{ key: 'sku', label: 'SKU', mono: true }, { key: 'product_name', label: '상품명' }, { key: 'lot_no', label: '제조번호', mono: true }, { key: 'expiry_date', label: '사용기한' },
+      { key: 'days_left', label: '남은 일수', num: true }, { key: 'qty_available', label: '가용재고', num: true }],
+    intro: (r, n) => `${state.baseDate} 기준 사용기한이 180일 미만 남은 SKU ${n}개를 안내드립니다. 판매 계획 또는 처리 방침을 회신해 주시기 바랍니다.`,
+    none: () => `${state.baseDate} 기준 사용기한이 180일 미만 남은 SKU는 없습니다.`,
+    period: () => state.baseDate,
+  },
+  inbound_issue: {
+    fetch: async (r) => apiAll('/v1/inbounds', { client_id: r.client, has_issue: 'true', date_from: r.from, date_to: r.to }),
+    cols: [{ key: 'inbound_id', label: '입고번호', mono: true }, { key: 'expected_date', label: '입고예정일' }, { key: 'issue_type', label: '이슈 유형', render: (x) => esc(ISSUE[x.issue_type]) }, { key: 'issue_note', label: '내용' }],
+    intro: (r, n) => `${r.from} ~ ${r.to} 입고 건 중 이슈가 확인된 ${n}건을 안내드립니다. 처리 방침을 회신해 주시기 바랍니다.`,
+    none: (r) => `${r.from} ~ ${r.to} 입고 건 중 이슈가 확인된 건은 없습니다.`,
+  },
+  return_status: {
+    fetch: async (r) => apiAll('/v1/returns', { client_id: r.client, date_from: r.from, date_to: r.to }),
+    cols: [{ key: 'return_id', label: '반품번호', mono: true }, { key: 'order_id', label: '주문번호', mono: true }, { key: 'requested_at', label: '접수일시', render: (x) => dt(x.requested_at) },
+      { key: 'reason', label: '사유' }, { key: 'status_label', label: '상태' }, { key: 'disposition_label', label: '처리 결과' }],
+    intro: (r, n) => `${r.from} ~ ${r.to} 접수된 반품 ${n}건의 처리 현황을 안내드립니다.`,
+    none: (r) => `${r.from} ~ ${r.to} 접수된 반품은 없습니다.`,
+  },
+  settlement: {
+    fetch: async (r) => (await api(`/v1/settlements/ST-${r.period.replace('-', '')}-${r.client}`)).data,
+    rows: (s) => s.lines,
+    cols: [{ key: 'item', label: '항목' }, { key: 'unit', label: '단위' }, { key: 'qty', label: '수량', num: true }, { key: 'unit_price', label: '단가', num: true }, { key: 'amount', label: '금액', num: true }],
+    intro: (r, n, s) => s.status === 'DRAFT'
+      ? `${r.period} 정산 내역(산정 중, ${s.period_start} ~ ${s.period_end} 기준)을 안내드립니다. 현재 합계는 ${num(s.total_amount)}원(부가세 포함)이며, 월말 확정 후 다시 안내드리겠습니다.`
+      : `${r.period} 정산 내역을 안내드립니다. 합계 ${num(s.total_amount)}원(부가세 포함)이며, 입금 기한은 ${s.due_date}입니다.`,
+    period: (r) => r.period,
+    footer: (s) => `<p style="margin:12px 0 0">공급가액 ${num(s.subtotal)}원 · 부가세 ${num(s.vat)}원 · <b>합계 ${num(s.total_amount)}원</b></p>`,
+  },
+};
+
+function reportKey(r) { return [r.type, r.client, r.date, r.from, r.to, r.period].join('|'); }
+function recipientsFor(type, clientId) {
+  const c = state.clientMap[clientId];
+  return c ? c.contacts.filter((ct) => ct.receives.includes(type)).map((ct) => ct.email) : [];
+}
+
+async function renderReport() {
+  const r = (state.report = state.report || defaultReport());
+  if (!r.client && state.client) r.client = state.client;
+  const clientOpts = state.clients.map((c) => `<option value="${esc(c.client_id + ' ' + c.name)}"></option>`).join('');
+  $('view').innerHTML = `
+    <div class="report-layout">
+      <div class="card report-form">
+        <div class="field">리포트 종류<select id="rpType">${Object.entries(REPORT_TYPES).map(([k, l]) => `<option value="${k}" ${r.type === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+        <div class="field">화주사<input id="rpClient" list="rpClientList" placeholder="이름 또는 ID 검색" value="${esc(r.client ? r.client + ' ' + state.clientMap[r.client].name : '')}"><datalist id="rpClientList">${clientOpts}</datalist></div>
+        <div id="rpPeriod"></div>
+        <button class="btn" id="rpLoad" style="width:100%;margin-bottom:14px">데이터 불러오기</button>
+        <div class="field">받는 사람<div class="recipients" id="rpTo"></div><div class="note" id="rpToNote"></div></div>
+        <div class="field">참조<div class="recipients" id="rpCc"></div></div>
+        <div class="field">안내 문구<textarea id="rpIntro" rows="4">${esc(r.intro)}</textarea><div class="note">데이터를 불러오면 리포트 종류에 맞는 문구가 자동으로 들어갑니다. 직접 수정할 수 있습니다.</div></div>
+        <label style="display:flex;gap:8px;align-items:center;font-size:13px;margin-bottom:14px"><input type="checkbox" id="rpAttach" ${r.attach ? 'checked' : ''}>전체 목록을 CSV 파일로 첨부</label>
+        <button class="btn primary" id="rpSend" style="width:100%">메일 발송</button>
+        <div class="note" id="rpSendNote"></div>
+      </div>
+      <div>
+        <div class="mail-preview">
+          <div class="mail-head" id="rpHead"></div>
+          <div class="mail-body" id="rpBody"></div>
+        </div>
+      </div>
+    </div>`;
+
+  const periodHtml = () => {
+    if (RANGE_TYPES.includes(r.type)) return `<div class="row-2"><div class="field">시작일<input type="date" id="rpFrom" value="${r.from}"></div><div class="field">종료일<input type="date" id="rpTo2" value="${r.to}"></div></div>`;
+    if (r.type === 'daily_summary') return `<div class="field">기준일<input type="date" id="rpDate" value="${r.date}" max="${state.baseDate}"></div>`;
+    if (r.type === 'settlement') return `<div class="field">정산월<select id="rpMonth"><option ${r.period === '2026-10' ? 'selected' : ''}>2026-10</option><option ${r.period === '2026-11' ? 'selected' : ''}>2026-11</option></select></div>`;
+    return `<div class="note" style="margin:-4px 0 12px">기준 시각(${state.baseDate}) 현재 재고 기준으로 작성됩니다.</div>`;
+  };
+  const bindPeriod = () => {
+    $('rpPeriod').innerHTML = periodHtml();
+    const on = (id, k) => $(id) && ($(id).onchange = (e) => { r[k] = e.target.value; markStale(); });
+    on('rpFrom', 'from'); on('rpTo2', 'to'); on('rpDate', 'date'); on('rpMonth', 'period');
+  };
+  const markStale = () => { if (r.data && reportKey(r) !== r.loadedKey) { r.data = null; r.error = ''; drawPreview(); } };
+
+  const chipList = (boxId, listKey) => {
+    const box = $(boxId);
+    const draw = () => {
+      box.innerHTML = r[listKey].map((m, i) => `<span class="chip">${esc(m)}<button data-i="${i}" title="삭제">×</button></span>`).join('') + '<input placeholder="메일 주소 입력 후 Enter">';
+      box.querySelectorAll('button').forEach((b) => (b.onclick = () => { r[listKey].splice(Number(b.dataset.i), 1); draw(); drawHead(); }));
+      const input = box.querySelector('input');
+      const add = () => {
+        const v = input.value.trim().replace(/,$/, '');
+        if (!v) return;
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) { toast('메일 주소 형식을 확인해 주세요.'); return; }
+        if (!r[listKey].includes(v)) r[listKey].push(v);
+        draw(); drawHead(); box.querySelector('input').focus();
+      };
+      input.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); add(); } };
+      input.onblur = add;
+    };
+    draw();
+  };
+  const setRecipients = () => {
+    r.to_list = r.client ? recipientsFor(r.type, r.client) : [];
+    chipList('rpTo', 'to_list');
+    $('rpToNote').textContent = !r.client ? '화주사를 선택하면 이 리포트를 받는 담당자가 자동으로 입력됩니다.'
+      : r.to_list.length ? `${state.clientMap[r.client].name} 담당자 중 '${REPORT_TYPES[r.type]}' 수신 대상입니다.`
+        : `${state.clientMap[r.client].name}에는 '${REPORT_TYPES[r.type]}' 수신 담당자가 없습니다. 받는 사람을 직접 입력해 주세요.`;
+    $('rpToNote').className = 'note' + (r.client && !r.to_list.length ? ' warn' : '');
+  };
+
+  const subject = () => {
+    const spec = SPEC[r.type];
+    const period = spec.period ? spec.period(r) : `${r.from} ~ ${r.to}`;
+    return `[${REPORT_TYPES[r.type]}] ${r.client ? state.clientMap[r.client].name : '화주사'} ${period}`;
+  };
+  const drawHead = () => {
+    $('rpHead').innerHTML = `<div class="k">받는 사람</div><div>${esc(r.to_list.join(', ') || '-')}</div>
+      <div class="k">참조</div><div>${esc(r.cc_list.join(', ') || '-')}</div>
+      <div class="k">제목</div><div><b>${esc(subject())}</b></div>
+      <div class="k">첨부</div><div>${r.attach && r.data && rowsOf().length ? esc(csvName()) : '-'}</div>`;
+  };
+  const csvName = () => `${REPORT_TYPES[r.type].replace(/\s/g, '')}_${r.client}_${(SPEC[r.type].period ? SPEC[r.type].period(r) : r.from + '_' + r.to).replace(/[^0-9_]/g, '')}.csv`;
+  const rowsOf = () => (SPEC[r.type].rows ? SPEC[r.type].rows(r.data) : r.data);
+
+  const buildMailHtml = () => {
+    const spec = SPEC[r.type];
+    const rows = rowsOf();
+    const shown = rows.slice(0, 30);
+    const th = 'style="text-align:left;padding:6px 10px;border:1px solid #dcdfe4;background:#f4f5f7;font-size:12px"';
+    const td = (c) => `style="padding:6px 10px;border:1px solid #dcdfe4;font-size:12px;${c.num ? 'text-align:right' : ''}"`;
+    const cell = (c, row) => {
+      if (c.render) return c.render(row);
+      const v = row[c.key]; return c.num ? num(v) : esc(v == null ? '-' : v);
+    };
+    const table = rows.length
+      ? `<table style="border-collapse:collapse;margin:12px 0"><tr>${spec.cols.map((c) => `<th ${th}>${c.label}</th>`).join('')}</tr>${shown.map((row) => `<tr>${spec.cols.map((c) => `<td ${td(c)}>${cell(c, row)}</td>`).join('')}</tr>`).join('')}</table>`
+        + (rows.length > shown.length ? `<p style="font-size:12px;color:#7c828d">상위 ${shown.length}건만 표시했습니다. 전체 ${rows.length}건은 첨부 파일을 확인해 주세요.</p>` : '')
+      : '';
+    const name = r.client ? state.clientMap[r.client].name : '';
+    return `<div style="font-family:-apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;font-size:14px;line-height:1.6;color:#16181d">
+      <p>안녕하세요, ${esc(name)} 담당자님.<br>3PL CX팀입니다.</p>
+      <p>${esc(r.intro).replace(/\n/g, '<br>')}</p>
+      ${table}${spec.footer ? spec.footer(r.data) : ''}
+      <p>문의 사항은 이 메일로 회신해 주시기 바랍니다.<br>감사합니다.</p>
+      <p style="color:#7c828d;font-size:12px">3PL CX팀 드림</p></div>`;
+  };
+  const buildCsv = () => {
+    const spec = SPEC[r.type];
+    const plain = (c, row) => {
+      if (c.key === 'short') return row.safety_stock - row.qty_available;
+      if (c.key === 'recipient') return row.recipient.name;
+      if (c.key === 'issue_type') return ISSUE[row.issue_type];
+      const v = row[c.key]; return v == null ? '' : v;
+    };
+    const q = (v) => (/[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v));
+    return [spec.cols.map((c) => q(c.label)).join(',')].concat(rowsOf().map((row) => spec.cols.map((c) => q(plain(c, row))).join(','))).join('\n');
+  };
+  const drawPreview = () => {
+    drawHead();
+    if (r.error) { $('rpBody').innerHTML = `<div class="error-box">${esc(r.error)}</div>`; return; }
+    if (!r.data) { $('rpBody').innerHTML = '<div class="empty">리포트 종류와 화주사를 고르고 <b>데이터 불러오기</b>를 누르면 메일 미리보기가 나옵니다.</div>'; return; }
+    $('rpBody').innerHTML = buildMailHtml();
+  };
+
+  const load = async () => {
+    if (!r.client) { toast('화주사를 선택해 주세요.'); return; }
+    $('rpLoad').disabled = true; $('rpLoad').textContent = '불러오는 중...';
+    r.error = '';
+    try {
+      r.data = await SPEC[r.type].fetch(r);
+      r.loadedKey = reportKey(r);
+      const n = SPEC[r.type].rows ? SPEC[r.type].rows(r.data).length : r.data.length;
+      r.intro = n === 0 && SPEC[r.type].none ? SPEC[r.type].none(r) : SPEC[r.type].intro(r, n, r.data);
+      $('rpIntro').value = r.intro;
+    } catch (e) {
+      r.data = null; r.error = `데이터를 불러오지 못했습니다. ${e.message}`;
+    }
+    $('rpLoad').disabled = false; $('rpLoad').textContent = '데이터 불러오기';
+    drawPreview();
+  };
+
+  $('rpType').onchange = (e) => { r.type = e.target.value; r.data = null; r.intro = ''; $('rpIntro').value = ''; bindPeriod(); setRecipients(); drawPreview(); };
+  $('rpClient').onchange = (e) => {
+    const id = e.target.value.trim().split(' ')[0];
+    const c = state.clientMap[id] || state.clients.find((x) => x.name === e.target.value.trim());
+    r.client = c ? c.client_id : '';
+    if (c) e.target.value = `${c.client_id} ${c.name}`;
+    r.data = null; setRecipients(); drawPreview();
+  };
+  $('rpIntro').oninput = (e) => { r.intro = e.target.value; if (r.data) $('rpBody').innerHTML = buildMailHtml(); };
+  $('rpAttach').onchange = (e) => { r.attach = e.target.checked; drawHead(); };
+  $('rpLoad').onclick = load;
+  $('rpSend').onclick = async () => {
+    if (!r.data) { toast('먼저 데이터를 불러와 주세요.'); return; }
+    if (reportKey(r) !== r.loadedKey) { toast('조건이 바뀌었습니다. 데이터를 다시 불러와 주세요.'); return; }
+    if (!r.to_list.length) { toast('받는 사람을 입력해 주세요.'); return; }
+    const test = /^TEST/.test(state.meta.mail_mode);
+    const ok = await confirmBox('메일을 발송할까요?',
+      `<b>${esc(subject())}</b><br>받는 사람: ${esc(r.to_list.join(', '))}${r.cc_list.length ? '<br>참조: ' + esc(r.cc_list.join(', ')) : ''}<br><br>`
+      + (test ? '테스트 모드입니다. 실제로는 스크립트 속성 TEST_RECIPIENT 메일로만 발송됩니다.' : '<b>실제 발송 모드입니다.</b> 위 주소로 메일이 발송됩니다.'));
+    if (!ok) return;
+    $('rpSend').disabled = true; $('rpSendNote').textContent = '발송 중...'; $('rpSendNote').className = 'note';
+    try {
+      const res = await apiPost('/v1/mail/send', {
+        to: r.to_list, cc: r.cc_list, subject: subject(), body: buildMailHtml(), body_type: 'html',
+        client_id: r.client, report_type: r.type,
+        attachments: r.attach && rowsOf().length ? [{ filename: csvName(), content_type: 'text/csv', content: buildCsv() }] : [],
+      });
+      [...state.cache.keys()].filter((k) => k.includes('mail%2Flogs')).forEach((k) => state.cache.delete(k));
+      $('rpSendNote').textContent = `${res.message_id} ${res.status_label} · 실제 수신: ${res.actual_to.join(', ')}`;
+      toast('메일을 발송했습니다.');
+    } catch (e) {
+      $('rpSendNote').textContent = `발송하지 못했습니다. ${e.message}`; $('rpSendNote').className = 'note warn';
+    }
+    $('rpSend').disabled = false;
+  };
+
+  bindPeriod();
+  if (!r.to_list.length) setRecipients(); else { chipList('rpTo', 'to_list'); $('rpToNote').textContent = ''; }
+  chipList('rpCc', 'cc_list');
+  drawPreview();
+  if (r.client && !r.data && r.autoLoad !== false) { r.autoLoad = false; load(); }
+}
+
+function confirmBox(title, html) {
+  return new Promise((resolve) => {
+    $('confirmTitle').textContent = title; $('confirmBody').innerHTML = html;
+    $('confirmModal').style.display = 'flex';
+    const done = (v) => { $('confirmModal').style.display = 'none'; resolve(v); };
+    $('confirmYes').onclick = () => done(true); $('confirmNo').onclick = () => done(false);
+  });
+}
+
+// ───────────────────────── 시작 ─────────────────────────
+(async () => {
+  loadConfig();
+  render();
+  if (!state.baseUrl || !state.apiKey) { openSettings(); return; }
+  try { await connect(); render(); } catch (e) { openSettings(`저장된 설정으로 연결하지 못했습니다. (${e.message})`); }
+})();
+</script>
+</body>
+</html>
