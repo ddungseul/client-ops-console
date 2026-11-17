@@ -185,7 +185,9 @@
   .mail-preview { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
   .mail-head { padding: 16px 20px; border-bottom: 1px solid var(--line); font-size: 14px; display: grid; grid-template-columns: 76px 1fr; row-gap: 7px; background: var(--surface-2); }
   .mail-head .k { color: var(--text-3); }
-  .mail-body { padding: 20px; max-height: 640px; overflow: auto; }
+  .mail-body { padding: 20px; max-height: 760px; overflow: auto; }
+  .mail-body.has-frame { padding: 0; background: #f2f4f7; }
+  .mail-frame { display: block; width: 100%; min-height: 240px; border: 0; }
   .empty, .loading { padding: 48px 24px; text-align: center; color: var(--text-3); font-size: 14px; }
   .error-box { padding: 14px 16px; border: 1px solid #f1c9c6; background: var(--critical-bg); border-radius: var(--radius-sm); color: var(--critical-text); font-size: 14px; }
 
@@ -1231,9 +1233,9 @@ async function openIssue(id) {
   $('idPreview').onclick = () => {
     const box = $('idPreviewBox'); const show = box.style.display === 'none';
     box.style.display = show ? 'block' : 'none';
-    if (show) $('idPreviewBody').innerHTML = fillIntro(mail.body_template, $('idIntro').value);
+    if (show) setMailHtml($('idPreviewBody'), fillIntro(mail.body_template, $('idIntro').value));
   };
-  $('idIntro').oninput = () => { if ($('idPreviewBox').style.display !== 'none') $('idPreviewBody').innerHTML = fillIntro(mail.body_template, $('idIntro').value); };
+  $('idIntro').oninput = () => { if ($('idPreviewBox').style.display !== 'none') setMailHtml($('idPreviewBody'), fillIntro(mail.body_template, $('idIntro').value)); };
   $('idSend').onclick = async () => {
     const to = recipients();
     if (!to.length) { toast('받는 사람을 입력해 주세요.'); return; }
@@ -1420,7 +1422,7 @@ async function openCenterRequestForm(pre = {}) {
       <div class="mail-preview"><div class="mail-body" id="crPreview"></div></div>
       <button class="btn primary" id="crSend" style="width:100%;margin-top:12px">센터 요청 보내기</button>
       <div class="note ${m.test_mode ? 'warn' : ''}">${m.test_mode ? '테스트 모드: TEST_RECIPIENT 메일로만 발송됩니다.' : '실제 발송 모드: 센터 담당자에게 발송됩니다.'}</div>`;
-    const preview = () => { $('crPreview').innerHTML = c.body_template.replace('{{INTRO}}', esc($('crIntro').value).replace(/\n/g, '<br>')).replace('{{DUE}}', esc(dueText(Number($('crDue').value)))); };
+    const preview = () => { setMailHtml($('crPreview'), c.body_template.replace('{{INTRO}}', esc($('crIntro').value).replace(/\n/g, '<br>')).replace('{{DUE}}', esc(dueText(Number($('crDue').value))))); };
     $('crIntro').oninput = preview; $('crDue').onchange = preview; preview();
     $('crSend').onclick = async () => {
       const to = $('crTo').value.split(',').map((x) => x.trim()).filter(Boolean);
@@ -1630,7 +1632,7 @@ async function openInquiry(id) {
   const refresh = () => { openInquiry(id); if (state.view === 'centerInquiries') renderCenterInquiries(); };
   if ($('iqIssue')) $('iqIssue').onclick = (e) => { e.preventDefault(); openIssue(x.issue_id); };
   if (x.status === 'ANSWERED') return;
-  $('iqCPrev').onclick = () => { $('iqCBox').style.display = ''; $('iqCBody').innerHTML = fillIntro(cm.body_template, $('iqCIntro').value); };
+  $('iqCPrev').onclick = () => { $('iqCBox').style.display = ''; setMailHtml($('iqCBody'), fillIntro(cm.body_template, $('iqCIntro').value)); };
   $('iqCSend').onclick = async () => {
     const to = $('iqCTo').value.split(',').map((s) => s.trim()).filter(Boolean);
     if (!to.length) { toast('받는 사람을 입력해 주세요.'); return; }
@@ -1747,6 +1749,14 @@ function recipientsFor(type, clientId) {
   const c = state.clientMap[clientId];
   return c ? c.contacts.filter((ct) => ct.receives.includes(type)).map((ct) => ct.email) : [];
 }
+// 메일 미리보기: 콘솔 화면 스타일이 메일 본문에 섞이지 않게 iframe 안에 그림 (받는 사람이 보는 모습과 같음)
+function setMailHtml(el, html) {
+  el.classList.add('has-frame');
+  let f = el.querySelector('iframe.mail-frame');
+  if (!f) { el.innerHTML = ''; f = document.createElement('iframe'); f.className = 'mail-frame'; f.setAttribute('sandbox', 'allow-same-origin'); f.title = '메일 미리보기'; el.appendChild(f); }
+  f.onload = () => { try { f.style.height = f.contentDocument.documentElement.scrollHeight + 'px'; } catch (e) { /* 높이 자동 조정 실패 시 기본 높이 */ } };
+  f.srcdoc = '<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0;padding:16px;font-family:-apple-system,BlinkMacSystemFont,\'Apple SD Gothic Neo\',\'Malgun Gothic\',sans-serif;font-size:14px;line-height:1.6;color:#16181d}</style></head><body>' + html + '</body></html>';
+}
 function fillIntro(template, intro) { return template.replace('{{INTRO}}', esc(intro).replace(/\n/g, '<br>')); }
 async function sendMeta() {
   if (!state.sendMeta) state.sendMeta = (await api('/v1/schedules', {}, false)).meta;
@@ -1838,9 +1848,10 @@ async function renderSingle(r) {
   };
   const drawPreview = () => {
     drawHead();
+    $('rpBody').classList.remove('has-frame');
     if (r.error) { $('rpBody').innerHTML = `<div class="error-box">${esc(r.error)}</div>`; return; }
     if (!r.data) { $('rpBody').innerHTML = '<div class="empty">리포트 종류와 화주사를 고르고 <b>데이터 불러오기</b>를 누르면 메일 미리보기가 나옵니다.</div>'; return; }
-    $('rpBody').innerHTML = fillIntro(r.data.body_template, r.intro);
+    setMailHtml($('rpBody'), fillIntro(r.data.body_template, r.intro));
   };
   const load = async () => {
     if (!r.client) { toast('화주사를 선택해 주세요.'); return; }
@@ -1863,7 +1874,7 @@ async function renderSingle(r) {
     if (c) e.target.value = `${c.client_id} ${c.name}`;
     r.data = null; resetRecipients(); drawPreview();
   };
-  $('rpIntro').oninput = (e) => { r.intro = e.target.value; if (r.data) $('rpBody').innerHTML = fillIntro(r.data.body_template, r.intro); };
+  $('rpIntro').oninput = (e) => { r.intro = e.target.value; if (r.data) setMailHtml($('rpBody'), fillIntro(r.data.body_template, r.intro)); };
   $('rpAttach').onchange = (e) => { r.attach = e.target.checked; drawHead(); };
   $('rpLoad').onclick = load;
   $('rpSend').onclick = async () => {
